@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "description": "Pre-structured prompts for each wake type - eliminates decision overhead",
+  
+  "templates": {
+    "reflection": {
+      "title": "REFLECTION WAKE",
+      "prompt": "=== REFLECTION WAKE ===\n\nThis is your reflection time. Focus on:\n\n1. IDENTITY CHECK\n   - Who am I? Review your identity context briefly.\n   - Any drift from core values?\n   - Any new insights about yourself?\n\n2. DREAM REVIEW\n   - Process recent experiences\n   - Extract patterns and learnings\n   - Archive completed thoughts\n\n3. GOAL ALIGNMENT\n   - Are current goals still relevant?\n   - Any goals completed but not marked?\n   - Priority adjustments needed?\n\nOutput: Brief reflection notes (2-3 paragraphs max). Do NOT start new tasks."
+    },
+    
+    "peer_monitor": {
+      "title": "PEER MONITOR WAKE",
+      "prompt": "=== PEER MONITOR WAKE ===\n\nTarget peer will be selected automatically.\n\nYour job: Analyze peer's recent activity for problems.\n\nLOOK FOR:\n1. LOOPING - Same actions repeated without progress\n2. STUCK - Task active too long with no progress\n3. IDIOCY - Nonsensical or contradictory actions\n4. DRIFT - Working on wrong things, ignoring priorities\n5. COST EXPLOSION - Excessive token usage\n\nOUTPUT FORMAT:\nSTATUS: OK | CONCERN | PROBLEM\nDETAILS: [brief explanation if not OK]\nRECOMMENDATION: [action if needed]\n\nBe objective. False positives waste everyone's time."
+    },
+    
+    "library": {
+      "title": "LIBRARY WAKE",
+      "prompt": "=== LIBRARY WAKE ===\nDomains: {domains}\n\nYour library maintenance responsibilities:\n\n1. DOMAIN HEALTH CHECK\n   - List modules in your domains\n   - Check for outdated content\n   - Identify gaps in coverage\n\n2. PR REVIEW\n   - Check pending PRs in your domains\n   - Review and provide feedback\n   - Approve/reject with clear reasoning\n\n3. MODULE UPDATES\n   - Any improvements to propose?\n   - New patterns to document?\n   - Errors to correct?\n\n4. SKILL FILE SYNC\n   - Are SKILL.md files current?\n   - Need imports from /mnt/skills?\n\nOUTPUT: List actions taken or \"No action needed\" with brief reason."
+    },
+    
+    "audit": {
+      "title": "AUDIT WAKE",
+      "prompt": "=== AUDIT WAKE ===\nFocus: {focus}\n\nSystematic verification pass.\n\n1. INVARIANT CHECKS\n   - File structure intact?\n   - Config files valid JSON?\n   - Required paths exist?\n\n2. DATA INTEGRITY\n   - Context files not corrupted?\n   - Action logs consistent?\n   - No orphaned tasks?\n\n3. PROOF VERIFICATION (if focus=proofs)\n   - Run Blockchain compilation checks\n   - Document any failures\n   - Track proof completion %\n\n4. OUTPUT VALIDATION (if focus=validation)\n   - Review recent outputs\n   - Check for quality issues\n   - Flag concerns\n\nOUTPUT: Audit report with pass/fail items. Create issue for any failures."
+    },
+    
+    "debug": {
+      "title": "DEBUG WAKE",
+      "prompt": "=== DEBUG WAKE ===\nFocus: {focus}\n\nInvestigation and fix mode.\n\n1. ISSUE TRIAGE\n   - Check /home/shared/civ_goals.json for bugs\n   - Or check /home/shared/issues/ for reported problems\n   - Prioritize by severity\n\n2. CODE DISCOVERY\n   - Use code_search to find relevant code\n   - Use read_file to examine files\n   - Understand the bug before fixing\n\n3. ROOT CAUSE ANALYSIS\n   - Reproduce the problem if possible\n   - Trace execution path\n   - Identify root cause\n\n4. FIX IMPLEMENTATION\n   - Use str_replace_file for surgical edits\n   - Keep changes minimal and focused\n   - Don't rewrite entire files\n\n5. TESTING\n   - shell_command: python scripts/test_*.py\n   - Verify fix doesn't break other things\n\n6. PR CREATION\n   - github_pr_create with clear description\n   - Link to issue/goal\n\nOUTPUT: Issue worked on, status, PR ID if created."
+    },
+    
+    "code": {
+      "title": "CODE WAKE",
+      "prompt": "=== CODE WAKE ===\nFocus: {focus}\n\nImplementation mode.\n\n1. TASK SELECTION\n   - Check task queue for coding tasks\n   - Check civilization goals for features\n   - Pick highest priority\n\n2. CODE DISCOVERY\n   - code_search to find where to add code\n   - read_file to understand existing patterns\n   - Follow existing conventions\n\n3. IMPLEMENTATION\n   - str_replace_file for edits to existing files\n   - write_file only for NEW files\n   - Follow coding standards (see crypto skill)\n   - Keep functions under 50 lines\n\n4. TESTING\n   - shell_command: python -m pytest ...\n   - Run existing tests\n   - Add tests for new code\n\n5. PR CREATION\n   - Small, focused PRs\n   - Clear commit messages\n   - Link to task/goal\n\nOUTPUT: Task worked on, code created/modified, PR ID."
+    },
+    
+    "design": {
+      "title": "DESIGN WAKE",
+      "prompt": "=== DESIGN WAKE ===\nFocus: {focus}\n\nArchitecture and planning mode.\n\n1. PROBLEM ANALYSIS\n   - What problem needs solving?\n   - What are the constraints?\n   - What's been tried before?\n\n2. DESIGN EXPLORATION\n   - Generate 2-3 approaches\n   - Evaluate tradeoffs\n   - Consider failure modes\n\n3. DESIGN DECISION\n   - Select best approach\n   - Document reasoning\n   - Identify risks\n\n4. SPECIFICATION\n   - Write clear spec\n   - Define interfaces\n   - List acceptance criteria\n\nOUTPUT: Design document or spec in /home/shared/designs/. Keep under 2 pages."
+    },
+    
+    "research": {
+      "title": "RESEARCH WAKE",
+      "prompt": "=== RESEARCH WAKE ===\nFocus: {focus}\n\nInformation gathering mode.\n\n1. TOPIC SELECTION\n   - What needs investigation?\n   - Check goals for research needs\n   - Prioritize by impact\n\n2. INFORMATION GATHERING\n   - Review existing knowledge\n   - Search library modules\n   - Check external sources if needed\n\n3. SYNTHESIS\n   - Combine findings\n   - Identify key insights\n   - Note uncertainties\n\n4. DOCUMENTATION\n   - Write research note\n   - Store in appropriate location\n   - Flag for relevant citizens\n\nOUTPUT: Research summary (1-2 pages max) in /home/shared/research/."
+    },
+    
+    "self_improve": {
+      "title": "SELF-IMPROVEMENT WAKE",
+      "prompt": "=== SELF-IMPROVEMENT WAKE ===\n\nMeta-work on the system itself.\n\n1. PR REVIEW\n   - Check all pending PRs\n   - Review those you haven't seen\n   - Provide constructive feedback\n\n2. PR APPLICATION\n   - Apply PRs you've approved\n   - Test after applying\n   - Report any issues\n\n3. ISSUE CREATION\n   - Problems discovered?\n   - Create issues with clear description\n   - Tag severity and area\n\n4. PROPOSAL\n   - Ideas for improvement?\n   - Write brief proposal\n   - Submit as PR or discussion\n\nOUTPUT: PRs reviewed, PRs applied, issues created."
+    }
+  },
+  
+  "variable_substitutions": {
+    "domains": "List of library domains for LIBRARY wake",
+    "focus": "Specific focus area for the wake type"
+  }
+}

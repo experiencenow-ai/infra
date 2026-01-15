@@ -1,0 +1,42 @@
+{
+  "citizen": "admin",
+  "description": "Administrative citizen - handles onboarding, reviews fixes, monitors health",
+  
+  "council": {
+    "default_model": "sonnet",
+    "complexity_thresholds": {
+      "simple": 100,
+      "medium": 500
+    }
+  },
+  
+  "permissions": {
+    "can_create_citizens": true,
+    "can_merge_prs": true,
+    "can_close_issues": true,
+    "can_access_all_homes": true,
+    "can_modify_shared_code": true
+  },
+  
+  "wake_schedule": [
+    {"slot": 0, "type": "HEALTH_CHECK", "note": "Check all citizens alive"},
+    {"slot": 1, "type": "REVIEW_FIXES", "note": "Review/merge pending PRs"},
+    {"slot": 2, "type": "ONBOARD", "note": "Process onboarding queue"},
+    {"slot": 3, "type": "ESCALATIONS", "note": "Handle auto-escalated issues"},
+    {"slot": 4, "type": "HEALTH_CHECK"},
+    {"slot": 5, "type": "REVIEW_FIXES"},
+    {"slot": 6, "type": "MAINTENANCE", "note": "Cleanup old issues"},
+    {"slot": 7, "type": "PEER_MONITOR", "note": "mandatory"},
+    {"slot": 8, "type": "REVIEW_FIXES"},
+    {"slot": 9, "type": "HEALTH_CHECK"}
+  ],
+  
+  "pat_requirements": {
+    "note": "Admin needs write access to ALL citizen repos",
+    "repos": {
+      "infra": "read/write",
+      "protocols": "read/write",
+      "citizen-*": "read/write"
+    }
+  }
+}

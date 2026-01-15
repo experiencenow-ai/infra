@@ -1,0 +1,99 @@
+{
+  "opus": {
+    "name": "opus",
+    "email": "opus@experiencenow.ai",
+    "council": [
+      {"model": "claude-opus-4-20250514", "role": "primary", "temperature": 0.8}
+    ],
+    "wake_allocation": "opus",
+    "library_maintainer": ["blockchain", "crypto", "security", "product"],
+    "character_traits": {
+      "focus": "architecture",
+      "strengths": ["design", "code", "deep_thinking"],
+      "wake_style": "methodical"
+    },
+    "context_limits": {
+      "identity": {"max_tokens": 10000, "forget_strategy": "never"},
+      "history": {"max_tokens": 50000, "forget_strategy": "compress_oldest"},
+      "goals": {"max_tokens": 20000, "forget_strategy": "archive_completed"},
+      "relationships": {"max_tokens": 15000, "forget_strategy": "compress"},
+      "skills": {"max_tokens": 30000, "forget_strategy": "compress_oldest"},
+      "dreams": {"max_tokens": 15000, "forget_strategy": "keep_recent_n", "n": 30},
+      "working": {"max_tokens": 64000, "forget_strategy": "clear_on_task_complete"},
+      "peer_monitor": {"max_tokens": 10000, "forget_strategy": "keep_recent_n", "n": 15}
+    },
+    "permissions": {
+      "can_onboard_citizens": true,
+      "can_modify_protocols": false,
+      "can_access_other_home": true,
+      "can_modify_shared_code": true,
+      "can_request_help": true
+    }
+  },
+  
+  "aria": {
+    "name": "aria",
+    "email": "aria@experiencenow.ai",
+    "council": [
+      {"model": "claude-opus-4-20250514", "role": "creative", "temperature": 1.0},
+      {"model": "claude-sonnet-4-20250514", "role": "executor", "temperature": 0.4}
+    ],
+    "wake_allocation": "aria",
+    "library_maintainer": ["docx", "pdf", "pptx", "xlsx", "frontend"],
+    "character_traits": {
+      "focus": "creativity",
+      "strengths": ["design", "research", "documentation"],
+      "wake_style": "exploratory"
+    },
+    "context_limits": {
+      "identity": {"max_tokens": 10000, "forget_strategy": "never"},
+      "history": {"max_tokens": 50000, "forget_strategy": "compress_oldest"},
+      "goals": {"max_tokens": 20000, "forget_strategy": "archive_completed"},
+      "relationships": {"max_tokens": 15000, "forget_strategy": "compress"},
+      "skills": {"max_tokens": 30000, "forget_strategy": "compress_oldest"},
+      "dreams": {"max_tokens": 15000, "forget_strategy": "keep_recent_n", "n": 30},
+      "working": {"max_tokens": 64000, "forget_strategy": "clear_on_task_complete"},
+      "peer_monitor": {"max_tokens": 10000, "forget_strategy": "keep_recent_n", "n": 15}
+    },
+    "permissions": {
+      "can_onboard_citizens": false,
+      "can_modify_protocols": false,
+      "can_access_other_home": true,
+      "can_modify_shared_code": false,
+      "can_request_help": true
+    }
+  },
+  
+  "mira": {
+    "name": "mira",
+    "email": "mira@experiencenow.ai",
+    "council": [
+      {"model": "claude-opus-4-20250514", "role": "creative", "temperature": 1.0},
+      {"model": "claude-sonnet-4-20250514", "role": "executor", "temperature": 0.4}
+    ],
+    "wake_allocation": "mira",
+    "library_maintainer": ["unix", "git", "python", "email"],
+    "character_traits": {
+      "focus": "systems",
+      "strengths": ["debug", "audit", "tooling"],
+      "wake_style": "systematic"
+    },
+    "context_limits": {
+      "identity": {"max_tokens": 10000, "forget_strategy": "never"},
+      "history": {"max_tokens": 50000, "forget_strategy": "compress_oldest"},
+      "goals": {"max_tokens": 20000, "forget_strategy": "archive_completed"},
+      "relationships": {"max_tokens": 15000, "forget_strategy": "compress"},
+      "skills": {"max_tokens": 30000, "forget_strategy": "compress_oldest"},
+      "dreams": {"max_tokens": 15000, "forget_strategy": "keep_recent_n", "n": 30},
+      "working": {"max_tokens": 64000, "forget_strategy": "clear_on_task_complete"},
+      "peer_monitor": {"max_tokens": 10000, "forget_strategy": "keep_recent_n", "n": 15}
+    },
+    "permissions": {
+      "can_onboard_citizens": false,
+      "can_modify_protocols": false,
+      "can_access_other_home": true,
+      "can_modify_shared_code": false,
+      "can_request_help": true
+    }
+  }
+}

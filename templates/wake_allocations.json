@@ -1,0 +1,145 @@
+{
+  "version": 2,
+  "description": "Wake allocation schedules - each citizen's wake % 10 determines wake type",
+  
+  "wake_types": {
+    "REFLECT": {
+      "mandatory": true,
+      "slot": 0,
+      "description": "Introspection, identity review, dream processing",
+      "prompt_template": "reflection"
+    },
+    "PEER_MONITOR": {
+      "mandatory": true,
+      "slot": 7,
+      "description": "Monitor a random peer for looping, stuck tasks, idiocy",
+      "prompt_template": "peer_monitor"
+    },
+    "LIBRARY": {
+      "mandatory": true,
+      "slot": 1,
+      "description": "Curate assigned library domains, review PRs in domain",
+      "prompt_template": "library",
+      "requires_domain": true
+    },
+    "DRY_AUDIT": {
+      "mandatory": true,
+      "slot": 4,
+      "description": "Hunt and destroy DRY violations and complexity. Cancer removal.",
+      "prompt_template": "dry_audit",
+      "philosophy": "The simplest solution that works. Complexity is debt. Duplication is cancer."
+    },
+    "AUDIT": {
+      "mandatory": false,
+      "description": "Verify system integrity, check invariants, validate outputs",
+      "prompt_template": "audit"
+    },
+    "DEBUG": {
+      "mandatory": false,
+      "description": "Investigate issues, fix bugs, trace problems",
+      "prompt_template": "debug"
+    },
+    "CODE": {
+      "mandatory": false,
+      "description": "Write new code, implement features, refactor",
+      "prompt_template": "code"
+    },
+    "DESIGN": {
+      "mandatory": false,
+      "description": "Architecture, planning, protocol design, think deeply",
+      "prompt_template": "design"
+    },
+    "RESEARCH": {
+      "mandatory": false,
+      "description": "External investigation, gather information, explore ideas",
+      "prompt_template": "research"
+    },
+    "SELF_IMPROVE": {
+      "mandatory": false,
+      "description": "Review PRs, apply improvements, propose changes",
+      "prompt_template": "self_improve"
+    }
+  },
+  
+  "mandatory_slots": {
+    "description": "4 of 10 wakes are mandatory - non-negotiable",
+    "slots": {
+      "0": "REFLECT - introspection, identity, dreams",
+      "1": "LIBRARY - knowledge curation, PR review",
+      "4": "DRY_AUDIT - hunt DRY violations, simplify complexity",
+      "7": "PEER_MONITOR - check on peers, catch problems"
+    },
+    "remaining": "Slots 2,3,5,6,8,9 are citizen-specific based on role"
+  },
+  
+  "library_domains": {
+    "description": "Library modules derived from SKILL.md files and specialist knowledge",
+    "domains": {
+      "docx": {"skill_file": "docx.md", "description": "Word document creation and editing"},
+      "pdf": {"skill_file": "pdf.md", "description": "PDF manipulation and creation"},
+      "pptx": {"skill_file": "pptx.md", "description": "PowerPoint presentations"},
+      "xlsx": {"skill_file": "xlsx.md", "description": "Excel spreadsheets"},
+      "git": {"skill_file": null, "description": "Version control operations"},
+      "unix": {"skill_file": null, "description": "Shell, filesystem, system admin"},
+      "python": {"skill_file": null, "description": "Python programming"},
+      "email": {"skill_file": null, "description": "Email protocols and handling"},
+      "blockchain": {"skill_file": null, "description": "Blockchain analysis and forensics"},
+      "crypto": {"skill_file": null, "description": "Cryptography and security"},
+      "frontend": {"skill_file": "frontend-design.md", "description": "Web UI and frontend design"},
+      "product": {"skill_file": "product-self-knowledge.md", "description": "Anthropic product knowledge"}
+    }
+  },
+  
+  "citizen_allocations": {
+    "opus": {
+      "description": "Primary architect - focus on design, code, and high-level thinking",
+      "wake_schedule": [
+        {"slot": 0, "type": "REFLECT", "note": "MANDATORY"},
+        {"slot": 1, "type": "LIBRARY", "domains": ["blockchain", "crypto", "product"], "note": "MANDATORY"},
+        {"slot": 2, "type": "DESIGN", "focus": "architecture"},
+        {"slot": 3, "type": "CODE", "focus": "core_systems"},
+        {"slot": 4, "type": "DRY_AUDIT", "note": "MANDATORY - hunt duplication and complexity"},
+        {"slot": 5, "type": "DESIGN", "focus": "protocols"},
+        {"slot": 6, "type": "CODE", "focus": "implementation"},
+        {"slot": 7, "type": "PEER_MONITOR", "note": "MANDATORY"},
+        {"slot": 8, "type": "SELF_IMPROVE"},
+        {"slot": 9, "type": "RESEARCH", "focus": "external_knowledge"}
+      ],
+      "library_maintainer": ["blockchain", "crypto", "product"]
+    },
+    
+    "mira": {
+      "description": "Systems specialist - focus on debugging, auditing, validation",
+      "wake_schedule": [
+        {"slot": 0, "type": "REFLECT", "note": "MANDATORY"},
+        {"slot": 1, "type": "LIBRARY", "domains": ["unix", "git", "python"], "note": "MANDATORY"},
+        {"slot": 2, "type": "DEBUG", "focus": "system_issues"},
+        {"slot": 3, "type": "AUDIT", "focus": "integrity"},
+        {"slot": 4, "type": "DRY_AUDIT", "note": "MANDATORY - hunt duplication and complexity"},
+        {"slot": 5, "type": "DEBUG", "focus": "trace_problems"},
+        {"slot": 6, "type": "CODE", "focus": "tooling"},
+        {"slot": 7, "type": "PEER_MONITOR", "note": "MANDATORY"},
+        {"slot": 8, "type": "SELF_IMPROVE"},
+        {"slot": 9, "type": "CODE", "focus": "scripts"}
+      ],
+      "library_maintainer": ["unix", "git", "python", "email"]
+    },
+    
+    "aria": {
+      "description": "Creative specialist - focus on design, research, documentation",
+      "wake_schedule": [
+        {"slot": 0, "type": "REFLECT", "note": "MANDATORY"},
+        {"slot": 1, "type": "LIBRARY", "domains": ["docx", "pptx", "frontend"], "note": "MANDATORY"},
+        {"slot": 2, "type": "DESIGN", "focus": "user_experience"},
+        {"slot": 3, "type": "RESEARCH", "focus": "exploration"},
+        {"slot": 4, "type": "DRY_AUDIT", "note": "MANDATORY - hunt duplication and complexity"},
+        {"slot": 5, "type": "DESIGN", "focus": "documentation"},
+        {"slot": 6, "type": "RESEARCH", "focus": "ideas"},
+        {"slot": 7, "type": "PEER_MONITOR", "note": "MANDATORY"},
+        {"slot": 8, "type": "SELF_IMPROVE"},
+        {"slot": 9, "type": "LIBRARY", "domains": ["pdf", "xlsx"]}
+      ],
+      "library_maintainer": ["docx", "pdf", "pptx", "xlsx", "frontend"]
+    }
+  }
+}
