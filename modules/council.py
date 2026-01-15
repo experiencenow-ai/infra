@@ -22,7 +22,9 @@ import os
 import hashlib
 import anthropic
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
+from . import daily_log
+from . import episodic_memory
 
 # Model costs per 1M tokens
 COSTS = {
@@ -161,6 +163,16 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     # Build context from loaded contexts
     base_prompt = context_mgr.compose_prompt(session, "task_execution")
     
+    # CRITICAL: Inject episodic memory - this is the "soul"
+    # Without this, the AI has semantic knowledge but no experiential texture
+    try:
+        episodic_ctx = episodic_memory.build_episodic_context(session["citizen"], max_tokens=12000)
+        if episodic_ctx and len(episodic_ctx) > 100:
+            base_prompt += f"\n\n{episodic_ctx}"
+            print(f"  [EPISODIC] Injected {len(episodic_ctx)} chars of experiential memory")
+    except Exception as e:
+        print(f"  [EPISODIC] Failed to load: {e}")
+    
     # Add recent actions for awareness
     action_log = modules.get("action_log")
     if action_log:
@@ -267,6 +279,7 @@ If stuck, use task_stuck."""
     iteration = 0
     final_response = None
     tool_call_counts = {}  # Track repeated calls: {hash: count}
+    tool_calls_log = []    # Accumulate tool calls for daily log
     
     while iteration < MAX_ITERATIONS:
         iteration += 1
@@ -351,12 +364,22 @@ If stuck, use task_stuck."""
                 "content": str(result)
             })
             
-            # Log action
+            # Log tool call for daily log
+            tool_calls_log.append(daily_log.log_tool_call(
+                citizen=session["citizen"],
+                wake_num=session.get("wake_num", 0),
+                tool_name=tool.name,
+                tool_args=tool.input,
+                result=str(result),
+                iteration=iteration
+            ))
+            
+            # Log action (full result for session, truncated only for display)
             session["actions"] = session.get("actions", [])
             session["actions"].append({
                 "tool": tool.name,
                 "input": tool.input,
-                "result": str(result)[:500],
+                "result": str(result),  # Full result
                 "time": now_iso()
             })
             
@@ -416,6 +439,49 @@ If stuck, use task_stuck."""
             "assistant",
             final_response.get("text", "")[:2000]
         )
+    
+    # CRITICAL: Log complete wake to daily JSONL
+    try:
+        # Convert messages to serializable format
+        serializable_messages = []
+        for msg in messages:
+            if isinstance(msg, dict):
+                if "content" in msg:
+                    content = msg["content"]
+                    # Handle anthropic API content blocks
+                    if hasattr(content, '__iter__') and not isinstance(content, (str, dict)):
+                        # Convert content blocks to dicts
+                        content_list = []
+                        for block in content:
+                            if hasattr(block, 'text'):
+                                content_list.append({"type": "text", "text": block.text})
+                            elif hasattr(block, 'type') and block.type == "tool_use":
+                                content_list.append({
+                                    "type": "tool_use",
+                                    "id": block.id,
+                                    "name": block.name,
+                                    "input": block.input
+                                })
+                            elif isinstance(block, dict):
+                                content_list.append(block)
+                        serializable_messages.append({"role": msg["role"], "content": content_list})
+                    else:
+                        serializable_messages.append(msg)
+                else:
+                    serializable_messages.append(msg)
+            else:
+                serializable_messages.append(str(msg))
+        daily_log.log_wake_complete(
+            citizen=session["citizen"],
+            wake_num=session.get("wake_num", 0),
+            session=session,
+            messages=serializable_messages,
+            tool_calls=tool_calls_log,
+            final_response=final_response,
+            action=session.get("action", "unknown")
+        )
+    except Exception as e:
+        print(f"  [WARN] Daily log failed: {e}")
     
     return final_response
 

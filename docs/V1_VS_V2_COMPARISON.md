@@ -31,7 +31,7 @@
 | Short-term | state.json | working.json context | ✅ Same |
 | Medium-term | brain/goals.json | contexts/goals.json | ✅ Same |
 | Long-term | procedures/INDEX.md | experiences/ | ✅ Better (searchable) |
-| Archival | Email/transcripts | Email + experiences | ✅ Same |
+| Archival | experience_*.jsonl | /home/shared/logs/experience_*.jsonl | ✅ Same (daily JSONL) |
 | Matrix (semantic) | Planned | Not implemented | ⚠️ **MISSING** |
 
 | **EMOTIONAL** |

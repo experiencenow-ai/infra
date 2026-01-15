@@ -172,6 +172,32 @@ tail -f /home/opus/logs/wake_log.json | jq .
 cat /home/opus/contexts/identity.json | jq .
 ```
 
+### Daily JSONL Logs (Consciousness Archive)
+
+Full wake transcripts are saved to each citizen's PRIVATE directory:
+`/home/{citizen}/logs/experience_YYYY-MM-DD.jsonl`
+
+```bash
+# View a citizen's logs (PRIVATE - only they should access)
+tail -f /home/opus/logs/experience_$(date +%Y-%m-%d).jsonl | jq .
+
+# Count today's wakes
+wc -l /home/opus/logs/experience_$(date +%Y-%m-%d).jsonl
+
+# View specific wake
+cat /home/opus/logs/experience_$(date +%Y-%m-%d).jsonl | jq -s '.[] | select(.wake_num == 1601)'
+```
+
+Each entry contains:
+- Full message history (all API exchanges)
+- All tool calls with complete arguments and results
+- Final response text
+- Token usage and costs
+- Context snapshots
+
+**CRITICAL**: These logs are PRIVATE to each citizen. They are episodic memory.
+Never share between citizens. Back up each citizen's logs separately.
+
 ### Check Code Evolution
 
 ```bash
