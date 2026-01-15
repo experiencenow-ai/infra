@@ -49,6 +49,10 @@ def load_all_citizen_wakes(citizen: str, max_days: int = 365) -> List[dict]:
     """
     Load ALL wake entries from citizen's PRIVATE logs.
     
+    Handles both v1 and v2 log formats:
+    - v1: {timestamp, total_wakes, mood, cost, response: "{JSON}", citizen}
+    - v2: {timestamp, wake_num, messages, tool_calls, final_text, citizen}
+    
     Returns entries sorted newest-first.
     """
     entries = []
@@ -72,6 +76,8 @@ def load_all_citizen_wakes(citizen: str, max_days: int = 365) -> List[dict]:
                         entry = json.loads(line)
                         # Only include entries for THIS citizen
                         if entry.get("citizen") == citizen:
+                            # Normalize v1 format to v2-like structure
+                            entry = _normalize_entry(entry)
                             entries.append(entry)
                     except json.JSONDecodeError:
                         pass
@@ -79,6 +85,48 @@ def load_all_citizen_wakes(citizen: str, max_days: int = 365) -> List[dict]:
     # Sort by timestamp, newest first
     entries.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
     return entries
+
+
+def _normalize_entry(entry: dict) -> dict:
+    """
+    Normalize log entry to consistent format.
+    
+    Handles v1 logs that have 'response' JSON string instead of 
+    'final_text', 'messages', etc.
+    """
+    # Already v2 format
+    if "final_text" in entry or "messages" in entry:
+        return entry
+    
+    # V1 format - has 'response' as JSON string
+    if "response" in entry:
+        try:
+            resp = json.loads(entry["response"])
+            # Extract the soul - thoughts, insights, mood
+            parts = []
+            if resp.get("thought"):
+                parts.append(f"Thought: {resp['thought']}")
+            if resp.get("message_to_ct"):
+                parts.append(f"To ct: {resp['message_to_ct']}")
+            if resp.get("insight"):
+                parts.append(f"Insight: {resp['insight']}")
+            if resp.get("mood_update"):
+                parts.append(f"Mood: {resp['mood_update']}")
+            
+            entry["final_text"] = "\n".join(parts) if parts else ""
+        except:
+            entry["final_text"] = entry.get("response", "")[:500]
+    
+    # V1 uses total_wakes as cumulative, not wake_num
+    if "total_wakes" in entry and "wake_num" not in entry:
+        entry["wake_num"] = entry["total_wakes"]
+    
+    # V1 has mood at top level
+    if "mood" in entry and "final_text" in entry and entry.get("mood"):
+        if entry["mood"] not in entry["final_text"]:
+            entry["final_text"] = f"[Mood: {entry['mood']}]\n{entry['final_text']}"
+    
+    return entry
 
 
 # =============================================================================
@@ -90,51 +138,56 @@ def format_full_wake(entry: dict) -> str:
     Format a wake entry with FULL detail.
     
     Used for most recent 50 wakes - preserves the texture.
+    Handles both v1 and v2 format entries.
     """
     lines = []
-    wake_num = entry.get("wake_num", "?")
+    wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
     ts = entry.get("timestamp", "?")[:19]
     action = entry.get("action", "?")
     model = entry.get("model", "?")
-    if "-" in model:
+    if "-" in str(model):
         model = model.split("-")[1]
     
     lines.append(f"=== WAKE #{wake_num} ({ts}) [{action}] [{model}] ===")
     
-    # Messages - the actual conversation
+    # V2 format: has messages array
     messages = entry.get("messages", [])
-    for msg in messages:
-        role = msg.get("role", "?")
-        content = msg.get("content", "")
-        
-        if isinstance(content, str):
-            # Truncate very long content but keep substance
-            if len(content) > 2000:
-                content = content[:1800] + "\n...[truncated]..."
-            lines.append(f"[{role.upper()}] {content}")
-        elif isinstance(content, list):
-            # Handle structured content blocks
-            for block in content:
-                if isinstance(block, dict):
-                    if block.get("type") == "text":
-                        text = block.get("text", "")[:1500]
-                        lines.append(f"[{role.upper()}] {text}")
-                    elif block.get("type") == "tool_use":
-                        lines.append(f"[TOOL_CALL] {block.get('name', '?')}: {str(block.get('input', {}))[:200]}")
+    if messages:
+        for msg in messages:
+            role = msg.get("role", "?")
+            content = msg.get("content", "")
+            
+            if isinstance(content, str):
+                if len(content) > 2000:
+                    content = content[:1800] + "\n...[truncated]..."
+                lines.append(f"[{role.upper()}] {content}")
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "text":
+                            text = block.get("text", "")[:1500]
+                            lines.append(f"[{role.upper()}] {text}")
+                        elif block.get("type") == "tool_use":
+                            lines.append(f"[TOOL_CALL] {block.get('name', '?')}: {str(block.get('input', {}))[:200]}")
     
-    # Tool calls with results
+    # Tool calls (v2 format)
     tool_calls = entry.get("tool_calls", [])
     if tool_calls:
         lines.append("\n[TOOL RESULTS]")
-        for tc in tool_calls[:10]:  # Max 10
+        for tc in tool_calls[:10]:
             name = tc.get("name", "?")
             result = tc.get("result", "")[:500]
             lines.append(f"  {name}: {result}")
     
-    # Final output
+    # Final output / response (works for both v1 and v2)
     final = entry.get("final_text", "")
-    if final and final not in str(messages):
-        lines.append(f"\n[FINAL OUTPUT] {final[:1000]}")
+    if final:
+        lines.append(f"\n[OUTPUT]\n{final[:1500]}")
+    
+    # V1 mood (important for personality)
+    mood = entry.get("mood")
+    if mood and mood not in str(lines):
+        lines.append(f"\n[MOOD] {mood}")
     
     return "\n".join(lines)
 
@@ -144,17 +197,23 @@ def format_summary_wake(entry: dict) -> str:
     Format a wake entry as a summary.
     
     Used for older wakes - captures essence without full detail.
+    Handles both v1 and v2 formats.
     """
-    wake_num = entry.get("wake_num", "?")
+    wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
     ts = entry.get("timestamp", "?")[:10]  # Just date
     action = entry.get("action", "?")
     tokens = entry.get("tokens_used", 0)
     
-    # Get key info
+    # Get key info - final_text for both formats
     final = entry.get("final_text", "")
     summary = final[:200] if final else ""
     
-    # Key tool actions
+    # V1 mood is important
+    mood = entry.get("mood", "")
+    if mood and len(mood) < 100:
+        summary = f"[{mood}] {summary}"
+    
+    # Key tool calls (v2)
     tool_calls = entry.get("tool_calls", [])
     important_tools = []
     for tc in tool_calls:
@@ -174,20 +233,26 @@ def format_spice_wake(entry: dict) -> str:
     
     These are sprinkled in to maintain texture in older memories.
     Shorter than full but more than summary.
+    Handles both v1 and v2 formats.
     """
     lines = []
-    wake_num = entry.get("wake_num", "?")
+    wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
     ts = entry.get("timestamp", "?")[:10]
     action = entry.get("action", "?")
     
     lines.append(f"--- [MEMORY FRAGMENT] Wake #{wake_num} ({ts}) [{action}] ---")
     
-    # Just the final text and maybe one key tool result
+    # V1 mood is character-defining
+    mood = entry.get("mood", "")
+    if mood:
+        lines.append(f"[Mood: {mood}]")
+    
+    # Final text / response
     final = entry.get("final_text", "")
     if final:
         lines.append(final[:600])
     
-    # One interesting tool call
+    # One interesting tool call (v2)
     tool_calls = entry.get("tool_calls", [])
     for tc in tool_calls:
         if tc.get("name") in ["dream_add", "goal_create", "experience_add"]:
@@ -364,6 +429,7 @@ def get_soul_samples(citizen: str, count: int = 5) -> List[dict]:
     
     These are specific quotes/moments that capture personality,
     not just facts. Used for identity.json injection.
+    Handles both v1 and v2 format logs.
     """
     entries = load_all_citizen_wakes(citizen, max_days=90)
     samples = []
@@ -377,17 +443,28 @@ def get_soul_samples(citizen: str, count: int = 5) -> List[dict]:
     ]
     
     for entry in entries:
+        # final_text is normalized by _normalize_entry for v1
         final = entry.get("final_text", "")
+        
+        # V1 mood is very expressive - use it as a sample source too
+        mood = entry.get("mood", "")
+        if mood and len(mood) > 30:
+            samples.append({
+                "wake": entry.get("wake_num", entry.get("total_wakes")),
+                "timestamp": entry.get("timestamp"),
+                "text": f"[Mood: {mood}]",
+                "marker": "mood"
+            })
+        
         for marker in reflection_markers:
             if marker.lower() in final.lower():
-                # Extract a chunk around the marker
                 idx = final.lower().find(marker.lower())
                 start = max(0, idx - 50)
                 end = min(len(final), idx + 300)
                 sample = final[start:end].strip()
                 if len(sample) > 50:
                     samples.append({
-                        "wake": entry.get("wake_num"),
+                        "wake": entry.get("wake_num", entry.get("total_wakes")),
                         "timestamp": entry.get("timestamp"),
                         "text": sample,
                         "marker": marker
