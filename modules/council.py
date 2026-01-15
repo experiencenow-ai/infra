@@ -34,7 +34,7 @@ COSTS = {
 }
 
 # Safety limits
-MAX_COST_PER_WAKE = 1.00  # $1.00 max per wake
+MAX_COST_PER_WAKE = 2.00  # $2.00 max per wake
 MAX_TOOL_REPEATS = 3      # Warn after this many identical calls
 MAX_ITERATIONS = 30       # Max tool use loops
 
@@ -280,20 +280,24 @@ If stuck, use task_stuck."""
     final_response = None
     tool_call_counts = {}  # Track repeated calls: {hash: count}
     tool_calls_log = []    # Accumulate tool calls for daily log
+    cost_warning_given = False
     
     while iteration < MAX_ITERATIONS:
         iteration += 1
         
-        # SAFETY: Cost circuit breaker
+        # SAFETY: At 80% cost, tell AI to wrap up
+        if not cost_warning_given and session.get("cost", 0) > MAX_COST_PER_WAKE * 0.8:
+            print(f"  [COST WARNING] At 80% - telling AI to wrap up")
+            cost_warning_given = True
+            # Inject wrap-up instruction
+            messages.append({
+                "role": "user", 
+                "content": "[SYSTEM: You are at 80% of your cost budget for this wake. Please wrap up your current work and provide your conclusions. Do not start new investigations.]"
+            })
+        
+        # SAFETY: Hard stop at limit
         if session.get("cost", 0) > MAX_COST_PER_WAKE:
-            print(f"  [CIRCUIT BREAKER] Cost ${session['cost']:.2f} exceeded limit ${MAX_COST_PER_WAKE}")
-            final_response = {
-                "text": f"Cost limit exceeded (${session['cost']:.2f}). Stopping to prevent runaway costs.",
-                "model": model,
-                "tokens": session["tokens_used"],
-                "cost": session["cost"],
-                "circuit_breaker": True
-            }
+            print(f"  [COST LIMIT] ${session['cost']:.2f} - hard stop")
             break
         
         try:
@@ -349,14 +353,14 @@ If stuck, use task_stuck."""
                 print(f"  [WARN] {tool.name} called {tool_call_counts[call_hash]} times with same args")
                 result = f"WARNING: You've called {tool.name} {tool_call_counts[call_hash]} times with identical arguments. This suggests a loop. Try a different approach or use task_stuck if you're blocked."
             else:
-                print(f"  [TOOL] {tool.name}: {str(tool.input)[:60]}...")
+                print(f"  [TOOL] {tool.name}: {tool.input}")
                 result = tools_mod.execute_tool(
                     tool.name, 
                     tool.input, 
                     session, 
                     modules
                 )
-                print(f"  [RESULT] {str(result)[:80]}...")
+                print(f"  [RESULT] {result}")
             
             tool_results.append({
                 "type": "tool_result",

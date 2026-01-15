@@ -725,7 +725,7 @@ def interactive_loop(session: dict, m: dict, config: dict, initial_message: str 
     )
     
     print("\n[INTERACTIVE MODE]")
-    print("Commands: /task, /goals, /status, /email, /help, /quit")
+    print("Commands: /file, /task, /goals, /status, /email, /help, /quit")
     print()
     
     # Process initial message if provided
@@ -788,6 +788,7 @@ def handle_command(cmd: str, session: dict, m: dict, config: dict):
         print("""
 Commands:
   /task <desc>   - Create new task (enters intake)
+  /file <path>   - Send file with optional message
   /goals         - Show active goals
   /tasks         - Show task queue
   /status        - Session status
@@ -875,6 +876,39 @@ Commands:
                 print(f"[Created task: {task['id']}]")
         else:
             print("Usage: /task <description>")
+    
+    elif cmd.startswith("/file "):
+        # /file <path> [message] - send file content with optional message
+        parts = cmd[6:].strip().split(" ", 1)
+        filepath = parts[0]
+        message = parts[1] if len(parts) > 1 else "Please review this file:"
+        
+        try:
+            path = Path(filepath).expanduser()
+            if not path.exists():
+                print(f"[ERROR] File not found: {filepath}")
+                return
+            
+            content = path.read_text()
+            filename = path.name
+            
+            # Build prompt with file content
+            file_prompt = f"{message}\n\n--- {filename} ---\n{content}\n--- end {filename} ---"
+            
+            print(f"[Sending {filename} ({len(content):,} chars)]")
+            
+            # Process with council
+            result = m["council"].process(
+                file_prompt,
+                session,
+                config["council"],
+                m
+            )
+            m["reporter"].display(result, session)
+            m["context_mgr"].save_all(session)
+            
+        except Exception as e:
+            print(f"[ERROR] {e}")
     
     else:
         print(f"Unknown command: {cmd}")
