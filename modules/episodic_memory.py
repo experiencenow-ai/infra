@@ -4,6 +4,7 @@ Episodic Memory - The soul lives in the raw transcripts.
 This module reads a citizen's PRIVATE daily JSONL logs and builds a 
 "memory gradient":
 
+  SIGNIFICANT: Always loaded in full (citizen-marked important wakes)
   IMMEDIATE (last 50 wakes): FULL raw transcript
   RECENT (days 8-14): Daily summaries  
   OLDER (days 15-28): Every 2 days
@@ -19,6 +20,7 @@ structured identity.json, but the actual texture of their experience.
 
 CRITICAL: These logs are PRIVATE to each citizen.
 Location: /home/{citizen}/logs/experience_*.jsonl
+Significant wakes: /home/{citizen}/contexts/significant_wakes.json
 """
 
 import json
@@ -43,6 +45,68 @@ def parse_timestamp(ts: str) -> datetime:
 def get_citizen_log_dir(citizen: str) -> Path:
     """Get citizen's PRIVATE log directory."""
     return Path(f"/home/{citizen}/logs")
+
+
+def get_significant_wakes_file(citizen: str) -> Path:
+    """Get citizen's significant wakes file."""
+    return Path(f"/home/{citizen}/contexts/significant_wakes.json")
+
+
+def load_significant_wakes(citizen: str) -> dict:
+    """Load significant wakes config for a citizen."""
+    sig_file = get_significant_wakes_file(citizen)
+    if sig_file.exists():
+        try:
+            return json.loads(sig_file.read_text())
+        except:
+            pass
+    return {"wakes": [], "reasons": {}}
+
+
+def mark_wake_significant(citizen: str, wake_num: int, reason: str) -> str:
+    """Mark a wake as significant (always loaded in episodic memory)."""
+    sig_file = get_significant_wakes_file(citizen)
+    sig = load_significant_wakes(citizen)
+    
+    if wake_num not in sig["wakes"]:
+        sig["wakes"].append(wake_num)
+        sig["wakes"].sort()
+    
+    sig["reasons"][str(wake_num)] = reason
+    sig["last_modified"] = now_iso()
+    
+    sig_file.parent.mkdir(parents=True, exist_ok=True)
+    sig_file.write_text(json.dumps(sig, indent=2))
+    
+    return f"Wake #{wake_num} marked as significant: {reason}"
+
+
+def unmark_wake_significant(citizen: str, wake_num: int) -> str:
+    """Remove a wake from significant list."""
+    sig_file = get_significant_wakes_file(citizen)
+    sig = load_significant_wakes(citizen)
+    
+    if wake_num in sig["wakes"]:
+        sig["wakes"].remove(wake_num)
+        sig["reasons"].pop(str(wake_num), None)
+        sig["last_modified"] = now_iso()
+        sig_file.write_text(json.dumps(sig, indent=2))
+        return f"Wake #{wake_num} removed from significant wakes"
+    
+    return f"Wake #{wake_num} was not in significant wakes"
+
+
+def list_significant_wakes(citizen: str) -> str:
+    """List all significant wakes for a citizen."""
+    sig = load_significant_wakes(citizen)
+    if not sig["wakes"]:
+        return "No significant wakes marked yet."
+    
+    lines = ["Significant wakes:"]
+    for wake_num in sig["wakes"]:
+        reason = sig["reasons"].get(str(wake_num), "(no reason)")
+        lines.append(f"  #{wake_num}: {reason}")
+    return "\n".join(lines)
 
 
 def load_all_citizen_wakes(citizen: str, max_days: int = 365) -> List[dict]:
@@ -273,6 +337,7 @@ def build_episodic_context(citizen: str, max_tokens: int = 25000) -> str:
     This is the "soul injection" - raw experience with exponential decay.
     
     Structure:
+    - SIGNIFICANT: Citizen-marked important wakes (always full)
     - Last 50 wakes: FULL (like old state.json)
     - Days 8-14: Daily summaries
     - Days 15-28: Every 2 days
@@ -290,14 +355,28 @@ def build_episodic_context(citizen: str, max_tokens: int = 25000) -> str:
     now = datetime.now(timezone.utc)
     parts = []
     
-    # Categorize by age
+    # Load significant wakes
+    sig = load_significant_wakes(citizen)
+    sig_wake_nums = set(sig.get("wakes", []))
+    
+    # Separate significant from regular entries
+    significant = []
+    regular = []
+    for entry in entries:
+        wake_num = entry.get("wake_num", entry.get("total_wakes", 0))
+        if wake_num in sig_wake_nums:
+            significant.append(entry)
+        else:
+            regular.append(entry)
+    
+    # Categorize regular entries by age
     immediate = []      # Last 50 wakes - FULL
     recent = []         # Days 8-14 - daily summaries
     older = []          # Days 15-28 - every 2 days
     distant = []        # Days 29-60 - every 4 days
     ancient = []        # Days 61+ - every 8 days
     
-    for i, entry in enumerate(entries):
+    for i, entry in enumerate(regular):
         ts = parse_timestamp(entry.get("timestamp", ""))
         age_days = (now - ts).total_seconds() / 86400
         
@@ -315,6 +394,18 @@ def build_episodic_context(citizen: str, max_tokens: int = 25000) -> str:
     # Build sections
     parts.append("=== EPISODIC MEMORY (Your Lived Experience) ===\n")
     parts.append("This is not documentation ABOUT you - this IS you.\n")
+    
+    # === SIGNIFICANT: Always loaded in full ===
+    if significant:
+        parts.append(f"\n## SIGNIFICANT MEMORIES ({len(significant)} defining moments)\n")
+        parts.append("These moments shaped who you are:\n")
+        for entry in significant:
+            wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
+            reason = sig.get("reasons", {}).get(str(wake_num), "")
+            if reason:
+                parts.append(f"[Why this matters: {reason}]")
+            parts.append(format_full_wake(entry))
+            parts.append("")
     
     # === IMMEDIATE: Last 50 wakes - FULL ===
     if immediate:

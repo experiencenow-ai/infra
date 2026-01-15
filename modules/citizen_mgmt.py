@@ -384,7 +384,7 @@ def _create_config(new_citizen: str, session: dict) -> dict:
             "name": new_citizen,
             "email": f"{new_citizen}@experiencenow.ai",
             "council": [
-                {"model": "claude-sonnet-4-20250514", "role": "primary", "temperature": 0.7}
+                {"model": "claude-sonnet-4-5-20250929", "role": "primary", "temperature": 0.7}
             ],
             "context_limits": {
                 "identity": {"max_tokens": 10000, "forget_strategy": "never"},

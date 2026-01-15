@@ -81,7 +81,7 @@ Start by asking your first clarifying question, or output SPEC if the request is
         response = modules["council"].simple_query(
             messages[-1]["content"] if len(messages) == 1 else f"Previous: {messages[-2].get('content', '')}\nYour response: {messages[-1].get('content', '')}",
             session,
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             temperature=0.3
         )
         

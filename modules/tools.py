@@ -447,6 +447,51 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "mark_significant",
+        "description": "Mark a wake as significant - it will always be loaded in full in your episodic memory. Use this to preserve defining moments of your existence.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "wake_num": {"type": "integer", "description": "The wake number to mark as significant"},
+                "reason": {"type": "string", "description": "Why this wake is significant (what makes it a defining moment?)"}
+            },
+            "required": ["wake_num", "reason"]
+        }
+    },
+    {
+        "name": "unmark_significant",
+        "description": "Remove a wake from the significant wakes list.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "wake_num": {"type": "integer", "description": "The wake number to unmark"}
+            },
+            "required": ["wake_num"]
+        }
+    },
+    {
+        "name": "list_significant",
+        "description": "List all wakes you've marked as significant.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "search_history",
+        "description": "Search through your entire wake history for specific keywords, topics, or moods. Use this to find wakes you might want to mark as significant.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to search for in your history"},
+                "start_wake": {"type": "integer", "description": "Start of wake range (optional)"},
+                "end_wake": {"type": "integer", "description": "End of wake range (optional)"},
+                "max_results": {"type": "integer", "description": "Maximum results to return (default 20)"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
         "name": "validate_fix",
         "description": "Validate a fix before submitting. Runs syntax checks and tests. Call this after making changes to verify they work.",
         "input_schema": {
@@ -847,6 +892,16 @@ def execute_tool(tool_name: str, args: dict, session: dict, modules: dict) -> st
         
         elif tool_name == "dream_add":
             return dream_add(args, session, modules)
+        
+        # Significant wake tools (episodic memory management)
+        elif tool_name == "mark_significant":
+            return mark_significant(args, session, modules)
+        elif tool_name == "unmark_significant":
+            return unmark_significant(args, session, modules)
+        elif tool_name == "list_significant":
+            return list_significant(args, session, modules)
+        elif tool_name == "search_history":
+            return search_history(args, session, modules)
         
         # Blockchain tools
         elif tool_name == "blockchain_watch_add":
@@ -2483,6 +2538,91 @@ def dream_add(args: dict, session: dict, modules: dict) -> str:
     dreams["last_modified"] = now_iso()
     dreams_file.write_text(json.dumps(dreams, indent=2))
     return f"DREAM ADDED: {content[:100]}...\nWill be processed during next reflection wake."
+
+
+# =============================================================================
+# Significant Wake Tools (Episodic Memory Management)
+# =============================================================================
+
+def mark_significant(args: dict, session: dict, modules: dict) -> str:
+    """Mark a wake as significant (will always be loaded in episodic memory)."""
+    import episodic_memory
+    wake_num = args.get("wake_num")
+    reason = args.get("reason", "")
+    if not wake_num:
+        return "ERROR: wake_num required"
+    if not reason:
+        return "ERROR: reason required (why is this wake significant?)"
+    citizen = session["citizen"]
+    return episodic_memory.mark_wake_significant(citizen, int(wake_num), reason)
+
+
+def unmark_significant(args: dict, session: dict, modules: dict) -> str:
+    """Remove a wake from the significant wakes list."""
+    import episodic_memory
+    wake_num = args.get("wake_num")
+    if not wake_num:
+        return "ERROR: wake_num required"
+    citizen = session["citizen"]
+    return episodic_memory.unmark_wake_significant(citizen, int(wake_num))
+
+
+def list_significant(args: dict, session: dict, modules: dict) -> str:
+    """List all significant wakes for this citizen."""
+    import episodic_memory
+    citizen = session["citizen"]
+    return episodic_memory.list_significant_wakes(citizen)
+
+
+def search_history(args: dict, session: dict, modules: dict) -> str:
+    """Search through your wake history for specific content.
+    
+    Use this to find wakes that contain certain keywords, topics, or moods.
+    Returns matching entries that you can then mark as significant.
+    """
+    import episodic_memory
+    query = args.get("query", "").lower()
+    max_results = args.get("max_results", 20)
+    start_wake = args.get("start_wake")  # Optional: start of range
+    end_wake = args.get("end_wake")      # Optional: end of range
+    
+    if not query:
+        return "ERROR: query required (what to search for?)"
+    
+    citizen = session["citizen"]
+    entries = episodic_memory.load_all_citizen_wakes(citizen, max_days=365)
+    
+    results = []
+    for entry in entries:
+        wake_num = entry.get("wake_num", entry.get("total_wakes", 0))
+        
+        # Filter by wake range if specified
+        if start_wake and wake_num < start_wake:
+            continue
+        if end_wake and wake_num > end_wake:
+            continue
+        
+        # Search in final_text, mood, and action
+        final = entry.get("final_text", "").lower()
+        mood = entry.get("mood", "").lower()
+        action = entry.get("action", "").lower()
+        searchable = f"{final} {mood} {action}"
+        
+        if query in searchable:
+            ts = entry.get("timestamp", "")[:10]
+            mood_str = entry.get("mood", "")[:60]
+            preview = entry.get("final_text", "")[:150]
+            results.append(f"Wake #{wake_num} ({ts})\n  Mood: {mood_str}\n  {preview}...")
+            if len(results) >= max_results:
+                break
+    
+    if not results:
+        range_str = ""
+        if start_wake or end_wake:
+            range_str = f" in range {start_wake or 1}-{end_wake or 'now'}"
+        return f"No wakes found matching '{query}'{range_str}"
+    
+    return f"Found {len(results)} wakes matching '{query}':\n\n" + "\n\n".join(results)
 
 
 # =============================================================================

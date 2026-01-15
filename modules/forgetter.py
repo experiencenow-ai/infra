@@ -20,13 +20,13 @@ from typing import Optional
 # Model selection for forgetting
 # Sonnet for normal compression (cost effective, follows instructions well)
 # Opus only for escalation (when first pass fails or for identity context)
-FORGET_MODEL_DEFAULT = "claude-sonnet-4-20250514"
-FORGET_MODEL_ESCALATE = "claude-opus-4-20250514"
+FORGET_MODEL_DEFAULT = "claude-sonnet-4-5-20250929"
+FORGET_MODEL_ESCALATE = "claude-opus-4-5-20251101"
 
 COSTS = {
-    "claude-opus-4-20250514": {"input": 15.0, "output": 75.0},
-    "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
-    "claude-3-5-haiku-20241022": {"input": 0.25, "output": 1.25}
+    "claude-opus-4-5-20251101": {"input": 15.0, "output": 75.0},
+    "claude-sonnet-4-5-20250929": {"input": 3.0, "output": 15.0},
+    "claude-haiku-4-5-20251001": {"input": 0.25, "output": 1.25}
 }
 
 def now_iso():

@@ -28,9 +28,9 @@ import episodic_memory
 
 # Model costs per 1M tokens
 COSTS = {
-    "claude-opus-4-20250514": {"input": 15.0, "output": 75.0},
-    "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
-    "claude-3-5-haiku-20241022": {"input": 0.25, "output": 1.25}
+    "claude-opus-4-5-20251101": {"input": 15.0, "output": 75.0},
+    "claude-sonnet-4-5-20250929": {"input": 3.0, "output": 15.0},
+    "claude-haiku-4-5-20251001": {"input": 0.25, "output": 1.25}
 }
 
 # Safety limits
@@ -39,9 +39,9 @@ MAX_TOOL_REPEATS = 3      # Warn after this many identical calls
 MAX_ITERATIONS = 30       # Max tool use loops
 
 # Complexity routing
-ROUTER_MODEL = "claude-3-5-haiku-20241022"
-SIMPLE_MODEL = "claude-3-5-haiku-20241022"
-MEDIUM_MODEL = "claude-sonnet-4-20250514"
+ROUTER_MODEL = "claude-haiku-4-5-20251001"
+SIMPLE_MODEL = "claude-haiku-4-5-20251001"
+MEDIUM_MODEL = "claude-sonnet-4-5-20250929"
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -131,7 +131,7 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     Each wake type gets limited tools to reduce confusion.
     """
     if not council_config:
-        council_config = [{"model": "claude-sonnet-4-20250514", "role": "primary", "temperature": 0.7}]
+        council_config = [{"model": "claude-sonnet-4-5-20250929", "role": "primary", "temperature": 0.7}]
     
     client = get_client()
     context_mgr = modules.get("context_mgr")
@@ -308,7 +308,7 @@ If stuck, use task_stuck."""
             return {"error": str(e), "text": f"API Error: {e}"}
         
         # Track costs
-        costs = COSTS.get(model, COSTS["claude-sonnet-4-20250514"])
+        costs = COSTS.get(model, COSTS["claude-sonnet-4-5-20250929"])
         session["tokens_used"] = session.get("tokens_used", 0) + \
             response.usage.input_tokens + response.usage.output_tokens
         session["cost"] = session.get("cost", 0) + \
@@ -491,7 +491,7 @@ def simple_query(prompt: str, session: dict, model: str = None, temperature: flo
     Used for forgetting, summarization, etc.
     """
     if model is None:
-        model = "claude-sonnet-4-20250514"
+        model = "claude-sonnet-4-5-20250929"
     
     client = get_client()
     
@@ -504,7 +504,7 @@ def simple_query(prompt: str, session: dict, model: str = None, temperature: flo
         )
         
         # Track costs
-        costs = COSTS.get(model, COSTS["claude-sonnet-4-20250514"])
+        costs = COSTS.get(model, COSTS["claude-sonnet-4-5-20250929"])
         session["tokens_used"] = session.get("tokens_used", 0) + \
             response.usage.input_tokens + response.usage.output_tokens
         session["cost"] = session.get("cost", 0) + \
