@@ -325,6 +325,7 @@ def main():
     parser.add_argument("--no-background", action="store_true", help="Skip background tasks")
     parser.add_argument("--background-only", action="store_true", help="Run only background tasks, no wake")
     parser.add_argument("--status", action="store_true", help="Show status and exit")
+    parser.add_argument("--message", "-m", type=str, help="Send a message/prompt to citizen")
     args = parser.parse_args()
     
     citizen = args.citizen
@@ -526,7 +527,12 @@ def run_single_wake(citizen: str, citizen_home: Path, config: dict, args):
         except Exception as e:
             print(f"[BOOTSTRAP] Check failed: {e}")
         
-        if bootstrap_task:
+        if args.message:
+            # User sent a direct message/prompt - HIGHEST PRIORITY
+            action = "prompt"
+            context = {"message": args.message, "wake_type": "prompt"}
+            print(f"[WAKE ACTION] prompt from ct")
+        elif bootstrap_task:
             # Override normal wake - do bootstrap instead
             action = "bootstrap"
             context = bootstrap_task
@@ -538,7 +544,7 @@ def run_single_wake(citizen: str, citizen_home: Path, config: dict, args):
         
         if args.interactive:
             # Interactive mode - human drives
-            interactive_loop(session, m, config)
+            interactive_loop(session, m, config, initial_message=args.message)
         else:
             # Autonomous mode
             # Show structured prompt status
@@ -602,6 +608,10 @@ def run_single_wake(citizen: str, citizen_home: Path, config: dict, args):
             elif action == "reflection":
                 print("[REFLECTION] No tasks - scanning peer goals")
                 m["executor"].reflection_wake(session, m)
+            elif action == "prompt":
+                msg = context.get("message", "")
+                print(f"[PROMPT] {msg[:80]}...")
+                m["executor"].prompt_wake(session, msg, m)
             else:
                 print(f"[WARN] Unknown action: {action}, falling back to reflection")
                 m["executor"].reflection_wake(session, m)
@@ -702,7 +712,7 @@ def _record_wake_to_log(citizen_home: Path, session: dict):
     except Exception as e:
         print(f"[WARN] Failed to record wake: {e}")
 
-def interactive_loop(session: dict, m: dict, config: dict):
+def interactive_loop(session: dict, m: dict, config: dict, initial_message: str = None):
     """Interactive mode - human provides input."""
     citizen = session["citizen"]
     
@@ -717,6 +727,18 @@ def interactive_loop(session: dict, m: dict, config: dict):
     print("\n[INTERACTIVE MODE]")
     print("Commands: /task, /goals, /status, /email, /help, /quit")
     print()
+    
+    # Process initial message if provided
+    if initial_message:
+        print(f"[{citizen}]> {initial_message}")
+        result = m["council"].process(
+            initial_message,
+            session,
+            config["council"],
+            m
+        )
+        m["reporter"].display(result, session)
+        m["context_mgr"].save_all(session)
     
     while True:
         try:

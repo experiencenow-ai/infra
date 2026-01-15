@@ -39,6 +39,19 @@ case "${1:-help}" in
         log "Status $CITIZEN"
         python3 core.py --citizen "$CITIZEN" --status
         ;;
+    talk|prompt)
+        check_env
+        CITIZEN="${2:-opus}"
+        MSG="$3"
+        if [ -z "$MSG" ]; then
+            # No initial message - just start interactive
+            log "Interactive mode with $CITIZEN"
+            python3 core.py --citizen "$CITIZEN" --interactive
+        else
+            log "Talking to $CITIZEN"
+            python3 core.py --citizen "$CITIZEN" --interactive --message "$MSG"
+        fi
+        ;;
     restore)
         CITIZEN="${2:-opus}"
         LOGS="${3:-/root/claude/$CITIZEN/logs}"
@@ -62,6 +75,7 @@ case "${1:-help}" in
         echo ""
         echo "  ./run.sh wake [citizen]           Single wake"
         echo "  ./run.sh loop [citizen]           Continuous loop"
+        echo "  ./run.sh talk [citizen] [\"msg\"]   Interactive mode"
         echo "  ./run.sh status [citizen]         Show status"
         echo "  ./run.sh restore <citizen> [logs] Restore from v1"
         echo "  ./run.sh push                     Push to GitHub"

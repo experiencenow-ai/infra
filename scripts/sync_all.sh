@@ -1,6 +1,7 @@
 #!/bin/bash
 # sync_all.sh - Sync code from GitHub as each citizen
-# Run as root, executes git pull as each user
+# Run as root, executes git commands as each user
+# Forces reset to origin/main (local changes discarded)
 
 set -e
 
@@ -18,13 +19,15 @@ for citizen in opus mira aria; do
     
     CODE_DIR="/home/$citizen/code"
     
-    # Create code dir if needed
-    if [ ! -d "$CODE_DIR" ]; then
-        log "  Cloning repo for $citizen..."
-        sudo -u "$citizen" git clone "$REPO" "$CODE_DIR"
+    # Check if it's a valid git repo
+    if [ -d "$CODE_DIR/.git" ]; then
+        log "  Fetching and resetting to origin/main..."
+        sudo -u "$citizen" -H sh -c "cd $CODE_DIR && git fetch origin && git reset --hard origin/main"
     else
-        log "  Pulling latest..."
-        sudo -u "$citizen" -H sh -c "cd $CODE_DIR && git pull origin main"
+        # Not a git repo - remove and clone fresh
+        log "  No git repo found, cloning fresh..."
+        rm -rf "$CODE_DIR"
+        sudo -u "$citizen" git clone "$REPO" "$CODE_DIR"
     fi
     
     echo "  ✓ $citizen synced"

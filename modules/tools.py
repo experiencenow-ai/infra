@@ -6,6 +6,7 @@ AI calls tools through the council module.
 """
 
 import json
+import os
 import subprocess
 import shutil
 from datetime import datetime, timezone
@@ -1684,12 +1685,25 @@ def _get_repo_path(session: dict) -> Path:
 
 def _run_git(args: list, cwd: Path) -> tuple[int, str, str]:
     """Run a git command and return (returncode, stdout, stderr)."""
+    env = os.environ.copy()
+    # For push/pull/fetch, use PAT for auth if available
+    if args and args[0] in ("push", "pull", "fetch") and "GITHUB_PAT" in os.environ:
+        pat = os.environ["GITHUB_PAT"]
+        # Set up credential helper inline
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_USERNAME"] = "x-access-token"
+        env["GIT_PASSWORD"] = pat
+        # Use credential helper that echoes env vars
+        cmd = ["git", "-c", "credential.helper=!f() { echo username=$GIT_USERNAME; echo password=$GIT_PASSWORD; }; f"] + args
+    else:
+        cmd = ["git"] + args
     result = subprocess.run(
-        ["git"] + args,
+        cmd,
         cwd=str(cwd),
         capture_output=True,
         text=True,
-        timeout=60
+        timeout=60,
+        env=env
     )
     return result.returncode, result.stdout, result.stderr
 

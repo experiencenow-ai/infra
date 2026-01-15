@@ -312,6 +312,23 @@ What would you like to do?
         print(f"[REFLECTION] Self-backup failed: {e}")
 
 
+def prompt_wake(session: dict, message: str, modules: dict):
+    """Handle a direct prompt/message from ct."""
+    citizen = session["citizen"]
+    session["wake_type"] = "PROMPT"
+    print(f"[EXECUTOR] Processing prompt from ct")
+    prompt = f"""
+=== DIRECT MESSAGE FROM CT ===
+
+ct (your creator) has sent you a message:
+
+"{message}"
+
+Respond thoughtfully and take any actions needed. You have full tool access.
+"""
+    modules["council"].process(prompt, session, session["config"]["council"], modules)
+
+
 def add_dream(citizen: str, dream_content: str) -> str:
     """Add a dream (thought for future processing) to citizen's dreams context."""
     dreams_file = Path(f"/home/{citizen}/contexts/dreams.json")
