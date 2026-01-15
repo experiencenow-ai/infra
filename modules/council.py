@@ -23,8 +23,8 @@ import hashlib
 import anthropic
 from datetime import datetime, timezone
 from typing import Optional, List
-from . import daily_log
-from . import episodic_memory
+import daily_log
+import episodic_memory
 
 # Model costs per 1M tokens
 COSTS = {
