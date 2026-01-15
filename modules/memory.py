@@ -33,7 +33,7 @@ from typing import Optional
 import anthropic
 
 # Use Haiku for all memory operations - it's just retrieval
-MEMORY_MODEL = "claude-haiku-4-20250514"
+MEMORY_MODEL = "claude-3-5-haiku-20241022"
 MEMORY_COST = {"input": 0.25, "output": 1.25}
 
 def now_iso():

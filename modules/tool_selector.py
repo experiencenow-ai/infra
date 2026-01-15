@@ -60,7 +60,7 @@ Select up to {max_tools - len(core)} most relevant tools."""
     try:
         client = get_client()
         response = client.messages.create(
-            model="claude-haiku-4-20250514",
+            model="claude-3-5-haiku-20241022",
             max_tokens=300,
             temperature=0,
             messages=[{"role": "user", "content": prompt}]

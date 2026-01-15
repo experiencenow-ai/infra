@@ -871,7 +871,7 @@ Provide a brief assessment:
     result = modules["council"].simple_query(
         analysis_prompt,
         session,
-        model="claude-haiku-4-20250514",  # Haiku is sufficient for pattern detection
+        model="claude-3-5-haiku-20241022",  # Haiku is sufficient for pattern detection
         temperature=0.3
     )
     

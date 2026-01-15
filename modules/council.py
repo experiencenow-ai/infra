@@ -30,7 +30,7 @@ import episodic_memory
 COSTS = {
     "claude-opus-4-20250514": {"input": 15.0, "output": 75.0},
     "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
-    "claude-haiku-4-20250514": {"input": 0.25, "output": 1.25}
+    "claude-3-5-haiku-20241022": {"input": 0.25, "output": 1.25}
 }
 
 # Safety limits
@@ -39,8 +39,8 @@ MAX_TOOL_REPEATS = 3      # Warn after this many identical calls
 MAX_ITERATIONS = 30       # Max tool use loops
 
 # Complexity routing
-ROUTER_MODEL = "claude-haiku-4-20250514"
-SIMPLE_MODEL = "claude-haiku-4-20250514"
+ROUTER_MODEL = "claude-3-5-haiku-20241022"
+SIMPLE_MODEL = "claude-3-5-haiku-20241022"
 MEDIUM_MODEL = "claude-sonnet-4-20250514"
 
 def now_iso():
