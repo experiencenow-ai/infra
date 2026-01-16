@@ -1,91 +1,123 @@
 """
-Tool Selector - Let Haiku pick relevant tools for each task.
+Tool Selector - Pattern matching, no AI needed.
 
-NOT hardcoded allowlists. AI reads tool descriptions and decides.
-
-OPTIMIZATION: Tool list is formatted once and cached since tools are static.
+Maps keywords → tool categories. Instant, free, deterministic.
 """
 
-import os
-from anthropic import Anthropic
+import re
 
-_client = None
-_cached_tool_list = None  # Cache formatted tool list
+# Core tools - always included
+CORE_TOOLS = {"task_complete", "task_stuck", "task_start", "task_progress", "shell_command"}
 
-def get_client():
-    global _client
-    if _client is None:
-        _client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-    return _client
+# Tool categories with trigger patterns
+TOOL_PATTERNS = {
+    # Email
+    "email": {
+        "patterns": ["email", "mail", "inbox", "message", "send", "compose"],
+        "tools": {"check_email", "send_email"}
+    },
+    # GitHub
+    "github": {
+        "patterns": ["github", "git", "commit", "pr", "pull request", "issue", "merge", "branch", "repo"],
+        "tools": {"github_commit", "github_pr_create", "github_pr_merge", "github_issue_create", "github_status"}
+    },
+    # Memory
+    "memory": {
+        "patterns": ["memory", "remember", "recall", "forgot", "history", "past", "earlier", "before"],
+        "tools": {"memory_store", "memory_recall", "memory_recent", "mark_significant", "search_history"}
+    },
+    # Library
+    "library": {
+        "patterns": ["library", "knowledge", "module", "learn", "document", "expertise"],
+        "tools": {"library_search", "library_load", "library_propose", "library_list"}
+    },
+    # Web
+    "web": {
+        "patterns": ["search", "web", "google", "look up", "find info", "research"],
+        "tools": {"web_search"}
+    },
+    # Files
+    "files": {
+        "patterns": ["file", "read", "write", "save", "create", "edit", "cat", "content"],
+        "tools": {"read_file", "write_file"}
+    },
+    # Task management  
+    "tasks": {
+        "patterns": ["task", "goal", "todo", "queue", "pending", "active", "assign"],
+        "tools": {"task_start", "task_complete", "task_stuck", "task_progress"}
+    },
+    # Code
+    "code": {
+        "patterns": ["code", "python", "script", "run", "execute", "compile", "test", "debug", "fix", "bug"],
+        "tools": {"shell_command", "read_file", "write_file"}
+    },
+    # Communication
+    "comm": {
+        "patterns": ["citizen", "opus", "aria", "mira", "peer", "help", "request", "notify"],
+        "tools": {"request_peer_help", "check_peer_requests", "send_email"}
+    },
+    # Experience/reflection
+    "reflect": {
+        "patterns": ["experience", "reflect", "insight", "learn", "significant", "important"],
+        "tools": {"mark_significant", "create_experience", "memory_store"}
+    }
+}
 
 
-def format_tools_brief(tools: list) -> str:
-    """Format tools as name: short_description."""
-    lines = []
-    for t in tools:
-        name = t.get("name", "unknown")
-        desc = t.get("description", "")
-        # First sentence only, truncated
-        short = desc.split(".")[0][:50] if desc else "no desc"
-        lines.append(f"{name}: {short}")
-    return "\n".join(lines)
-
-
-def select_tools(task_description: str, all_tools: list, max_tools: int = 12) -> list:
+def select_tools(task_description: str, all_tools: list, max_tools: int = 15) -> list:
     """
-    Use Haiku to select relevant tools for a task.
+    Select relevant tools using pattern matching.
     
-    Returns filtered list of tool definitions.
+    Zero API calls. Instant. Deterministic.
     """
-    global _cached_tool_list
-    
     if len(all_tools) <= max_tools:
         return all_tools
     
-    # Always include core tools
-    core = {"task_complete", "task_stuck", "task_start"}
+    # Lowercase for matching
+    text = task_description.lower()
     
-    # Cache tool list (tools don't change during runtime)
-    if _cached_tool_list is None:
-        _cached_tool_list = format_tools_brief(all_tools)
+    # Find matching categories
+    matched_tools = set(CORE_TOOLS)
+    matched_categories = []
     
-    prompt = f"""Pick tools for: {task_description[:100]}
-
-{_cached_tool_list}
-
-Return ONLY names, one per line. Max {max_tools - len(core)}."""
-
-    try:
-        client = get_client()
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        text = response.content[0].text if response.content else ""
-        selected = set()
-        for line in text.strip().split("\n"):
-            name = line.strip().strip("-•").split(":")[0].strip()
-            if name:
-                selected.add(name)
-        
-        # Build result: core + selected
-        result = []
-        for t in all_tools:
-            if t.get("name") in core or t.get("name") in selected:
-                result.append(t)
-        
-        print(f"  [TOOL SELECT] Haiku chose {len(result)}/{len(all_tools)} tools")
-        return result
-        
-    except Exception as e:
-        print(f"  [TOOL SELECT] Error: {e}, using all")
-        return all_tools
+    for category, data in TOOL_PATTERNS.items():
+        for pattern in data["patterns"]:
+            if pattern in text:
+                matched_tools.update(data["tools"])
+                matched_categories.append(category)
+                break
+    
+    # If nothing matched, include common defaults
+    if len(matched_tools) == len(CORE_TOOLS):
+        matched_tools.update({"check_email", "memory_recent", "read_file", "write_file"})
+    
+    # Build result from all_tools that match names
+    tool_names = {t.get("name") for t in all_tools}
+    matched_tools = matched_tools & tool_names  # Only include tools that exist
+    
+    result = [t for t in all_tools if t.get("name") in matched_tools]
+    
+    # If still under budget, add more common tools
+    if len(result) < max_tools:
+        common = ["web_search", "memory_recall", "library_search", "check_email"]
+        for name in common:
+            if len(result) >= max_tools:
+                break
+            if name not in matched_tools and name in tool_names:
+                for t in all_tools:
+                    if t.get("name") == name:
+                        result.append(t)
+                        matched_tools.add(name)
+                        break
+    
+    cats = ",".join(matched_categories[:3]) if matched_categories else "default"
+    print(f"  [TOOLS] Pattern matched {len(result)}/{len(all_tools)} ({cats})")
+    
+    return result
 
 
 def select_tools_for_wake(wake_type: str, focus: str, all_tools: list) -> list:
     """Select tools for a wake type."""
-    task_desc = f"{wake_type} wake. Focus: {focus or 'general'}"
+    # Combine wake type and focus for matching
+    task_desc = f"{wake_type} {focus or 'general'}"
     return select_tools(task_desc, all_tools)

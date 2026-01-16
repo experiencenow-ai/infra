@@ -5,16 +5,15 @@ Each citizen can have a "council" of models with different roles.
 This module handles calling the API and processing responses.
 
 COST OPTIMIZATION:
-- Simple tasks → Haiku (fast, cheap)
-- Medium tasks → Sonnet (default)
-- Complex tasks → Council config (may be Opus)
+- Pattern matching for routing (no API calls)
+- Simple tasks → Haiku with minimal context
+- Complex tasks → Opus/Sonnet with compressed context + caching
+- Tool selection via pattern matching (no API calls)
 
 SAFETY:
-- Cost circuit breaker: max $0.50/wake
+- Cost circuit breaker: max $5/wake
 - Tool call deduplication: warn after 3 identical calls
 - Auto-fail on max iterations: prevent infinite loops
-
-Haiku routes the task before execution.
 """
 
 import json
@@ -59,57 +58,64 @@ def tool_call_hash(name: str, args: dict) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:12]
 
 
-def route_complexity(task_desc: str, session: dict) -> str:
+def route_complexity(task: str, session: dict) -> str:
     """
-    Use Haiku to determine task complexity.
-    Returns: "simple", "medium", or "complex"
+    Classify task complexity using pattern matching.
+    
+    Zero API calls. Instant. Deterministic.
+    
+    simple = greetings, status checks, single actions
+    complex = everything else (safe default for real work)
     """
-    # Allow forcing complexity via session
+    text = task.lower().strip()
+    words = text.split()
+    word_count = len(words)
+    
+    # Force complex if session flag set
     if session.get("force_complex"):
+        print(f"  [ROUTE] Forced complex")
         return "complex"
     
-    prompt = f"""Rate this task. Reply with ONLY one word: simple, medium, or complex.
-
-simple = greetings, status checks, single file reads
-medium = standard coding, routine operations  
-complex = ANYTHING involving: thinking, analysis, philosophy, debugging, architecture, creative work, opinions, advice, multi-step reasoning, important questions
-
-Default to "complex" if unsure. Most real work is complex.
-
-Task: {task_desc[:300]}
-
-Rating:"""
-
-    try:
-        client = get_client()
-        response = client.messages.create(
-            model=ROUTER_MODEL,
-            max_tokens=10,
-            temperature=0.0,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        # Track (minimal) cost
-        session["tokens_used"] = session.get("tokens_used", 0) + \
-            response.usage.input_tokens + response.usage.output_tokens
-        session["cost"] = session.get("cost", 0) + \
-            (response.usage.input_tokens * COSTS[ROUTER_MODEL]["input"] + 
-             response.usage.output_tokens * COSTS[ROUTER_MODEL]["output"]) / 1_000_000
-        
-        result = response.content[0].text.strip().lower()
-        print(f"  [ROUTER] Haiku says: '{result}'")
-        
-        if "simple" in result:
+    # SIMPLE patterns - must be confident
+    simple_exact = {"hi", "hello", "hey", "test", "ping", "status", "help"}
+    if text in simple_exact or (word_count == 1 and words[0] in simple_exact):
+        print(f"  [ROUTE] Pattern: simple (greeting)")
+        return "simple"
+    
+    # Simple short queries
+    simple_patterns = [
+        "check email", "test email", "any email", "new email",
+        "what time", "current time", 
+        "how are you", "are you there", "you there",
+        "good morning", "good night", "good evening",
+    ]
+    for pattern in simple_patterns:
+        if pattern in text:
+            print(f"  [ROUTE] Pattern: simple ({pattern})")
             return "simple"
-        elif "medium" in result:
-            return "medium"
-        else:
-            # Default to complex for anything unclear
+    
+    # Short + question about basic status = simple
+    if word_count <= 6 and any(w in text for w in ["status", "check", "test", "email"]):
+        print(f"  [ROUTE] Pattern: simple (short status)")
+        return "simple"
+    
+    # COMPLEX patterns - real work
+    complex_patterns = [
+        "debug", "fix", "bug", "error", "implement", "create", "build",
+        "analyze", "think", "design", "architect", "optimize", "improve",
+        "explain", "why", "how does", "research", "investigate",
+        "code", "script", "function", "class", "module",
+        "goal", "task", "plan", "strategy",
+        "review", "audit", "compare", "evaluate",
+    ]
+    for pattern in complex_patterns:
+        if pattern in text:
+            print(f"  [ROUTE] Pattern: complex ({pattern})")
             return "complex"
-            
-    except Exception as e:
-        print(f"[ROUTER] Error: {e}, defaulting to complex")
-        return "complex"  # Default to complex on error, not medium
+    
+    # Default to complex - real work needs full context
+    print(f"  [ROUTE] Pattern: complex (default)")
+    return "complex"
 
 
 def select_model(complexity: str, council_config: list) -> tuple[str, float]:
@@ -129,9 +135,9 @@ def select_model(complexity: str, council_config: list) -> tuple[str, float]:
 def _process_simple(user_input: str, session: dict, model: str, temperature: float, 
                     tools: list, modules: dict) -> dict:
     """
-    Fast path for simple queries. Minimal context, no compression.
+    Fast path for simple queries. Minimal context, minimal tools.
     
-    Expected cost: ~$0.001 vs $0.30 for full path
+    Expected cost: ~$0.001-0.01 vs $0.30 for full path
     """
     client = get_client()
     tools_mod = modules.get("tools")
@@ -144,6 +150,12 @@ Current time: {now_iso()}"""
     
     messages = [{"role": "user", "content": user_input}]
     
+    # MINIMAL TOOLS for simple path - only essentials
+    # Full tool list is ~6000 tokens, this is ~800 tokens
+    SIMPLE_TOOL_NAMES = {"check_email", "send_email", "shell_command", "memory_recall", "web_search"}
+    simple_tools = [t for t in tools if t.get("name") in SIMPLE_TOOL_NAMES]
+    print(f"  [SIMPLE] {len(simple_tools)} tools (was {len(tools)})")
+    
     # Single API call (no iteration loop for simple queries)
     try:
         response = client.messages.create(
@@ -152,7 +164,7 @@ Current time: {now_iso()}"""
             temperature=temperature,
             system=system_prompt,
             messages=messages,
-            tools=tools
+            tools=simple_tools if simple_tools else None
         )
         
         input_cost = response.usage.input_tokens * COSTS.get(model, COSTS[SIMPLE_MODEL])["input"] / 1_000_000
@@ -208,7 +220,7 @@ Current time: {now_iso()}"""
                 temperature=temperature,
                 system=system_prompt,
                 messages=messages,
-                tools=tools
+                tools=simple_tools if simple_tools else None
             )
             
             # Update costs
@@ -255,7 +267,7 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     wake_type = session.get("wake_type", "TASK")
     focus = session.get("focus", "general")
     
-    # Use Haiku to select relevant tools (not hardcoded allowlists)
+    # Pattern-match relevant tools (no API call)
     try:
         from modules.tool_selector import select_tools_for_wake
     except ImportError:
@@ -267,9 +279,9 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     
     all_tools = tools_mod.get_all_tools()  # Core + dynamic tools
     filtered_tools = select_tools_for_wake(wake_type, focus, all_tools)
-    print(f"  [TOOLS] Haiku selected {len(filtered_tools)}/{len(all_tools)} tools for {wake_type}")
+    # Note: select_tools_for_wake now uses pattern matching, prints its own log
     
-    # Route complexity FIRST (cheap Haiku call)
+    # Route complexity FIRST (pattern matching - no API call)
     complexity = route_complexity(user_input, session)
     model, temperature = select_model(complexity, council_config)
     print(f"  [ROUTE] {complexity} → {model.split('-')[1]}")  # e.g., "haiku" or "opus"

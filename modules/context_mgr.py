@@ -43,7 +43,9 @@ def count_context_tokens(ctx: dict) -> int:
 def load_context(path: Path) -> dict:
     """Load a context from JSON file."""
     if not path.exists():
-        return create_empty_context(path.stem)
+        ctx = create_empty_context(path.stem)
+        ctx["_path"] = str(path)  # Set path so save_all works
+        return ctx
     
     with open(path) as f:
         ctx = json.load(f)
