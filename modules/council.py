@@ -335,65 +335,39 @@ If stuck: use task_stuck."""
             break
         
         try:
-            # Model selection:
-            # - First call or success continuation → main model (Opus, cached)
-            # - After failure → Haiku for recovery (minimal context)
-            use_recovery_mode = iteration > 1 and any(r.get("failed") for r in all_tool_results[-10:])
+            # Always use main model with cached context
+            # Opus sees errors and can decide how to handle them
+            # No Haiku recovery - it lacks context and loops
+            response = client.messages.create(
+                model=model,
+                max_tokens=8192,
+                temperature=temperature,
+                system=system_with_cache,
+                messages=messages,
+                tools=filtered_tools
+            )
+            iter_costs = COSTS.get(model, COSTS["claude-sonnet-4-5-20250929"])
             
-            if not use_recovery_mode:
-                # MAIN PATH: Opus with cached context
-                response = client.messages.create(
-                    model=model,
-                    max_tokens=8192,
-                    temperature=temperature,
-                    system=system_with_cache,
-                    messages=messages,
-                    tools=filtered_tools
-                )
-                iter_costs = COSTS.get(model, COSTS["claude-sonnet-4-5-20250929"])
-                
-                # Cache stats (only meaningful on first call)
-                if iteration == 1:
-                    cache_read = getattr(response.usage, 'cache_read_input_tokens', 0)
-                    cache_creation = getattr(response.usage, 'cache_creation_input_tokens', 0)
-                    fresh_input = response.usage.input_tokens - cache_read - cache_creation
-                    print(f"  [CACHE] Creating: {cache_creation}, Read: {cache_read}, Fresh: {fresh_input}")
-                    input_cost = (
-                        fresh_input * iter_costs["input"] +
-                        cache_read * iter_costs["input"] * 0.1 +
-                        cache_creation * iter_costs["input"] * 1.25
-                    ) / 1_000_000
-                else:
-                    # Subsequent calls benefit from cache
-                    cache_read = getattr(response.usage, 'cache_read_input_tokens', 0)
-                    if cache_read > 0:
-                        print(f"  [CACHE HIT] {cache_read} tokens cached")
-                    input_cost = response.usage.input_tokens * iter_costs["input"] * 0.1 / 1_000_000  # Mostly cached
-                
+            # Cache stats
+            cache_read = getattr(response.usage, 'cache_read_input_tokens', 0)
+            cache_creation = getattr(response.usage, 'cache_creation_input_tokens', 0)
+            total_input = response.usage.input_tokens
+            
+            if iteration == 1:
+                fresh_input = max(0, total_input - cache_read - cache_creation)
+                print(f"  [CACHE] Total: {total_input}, Creating: {cache_creation}, Fresh: {fresh_input}")
+                input_cost = (
+                    fresh_input * iter_costs["input"] +
+                    cache_read * iter_costs["input"] * 0.1 +
+                    cache_creation * iter_costs["input"] * 1.25
+                ) / 1_000_000
             else:
-                # RECOVERY PATH: Haiku with minimal context
-                failed_tools = [r for r in all_tool_results[-5:] if r.get("failed")]
-                failed_summary = "\n".join([
-                    f"- {r['tool']}: FAILED - {r['result'][:200]}" for r in failed_tools
-                ])
-                
-                recovery_prompt = f"""A tool failed. Task: {user_input[:200]}
-
-Failed:
-{failed_summary}
-
-Options: 1) Different tool to work around, 2) TASK_STUCK if unrecoverable, 3) TASK_COMPLETE if acceptable"""
-
-                print(f"  [RECOVERY] Haiku for error handling")
-                response = client.messages.create(
-                    model=SIMPLE_MODEL,
-                    max_tokens=2048,
-                    temperature=0.2,
-                    messages=[{"role": "user", "content": recovery_prompt}],
-                    tools=filtered_tools
-                )
-                iter_costs = COSTS.get(SIMPLE_MODEL, COSTS["claude-haiku-4-5-20251001"])
-                input_cost = response.usage.input_tokens * iter_costs["input"] / 1_000_000
+                if cache_read > 0:
+                    print(f"  [CACHE HIT] {cache_read} tokens cached")
+                # Cached portion at 10%, fresh at full price
+                cached_cost = cache_read * iter_costs["input"] * 0.1
+                fresh_cost = max(0, total_input - cache_read) * iter_costs["input"]
+                input_cost = (cached_cost + fresh_cost) / 1_000_000
         
         except Exception as e:
             return {"error": str(e), "text": f"API Error: {e}"}
@@ -551,9 +525,7 @@ Options: 1) Different tool to work around, 2) TASK_STUCK if unrecoverable, 3) TA
                 break
             else:
                 # Need to check with Opus if there's more to do - but use cache
-                # Don't reset iteration, just note we should use main model
-                pass  # Next iteration still uses main model (iteration check is below)
-        # If any_failed, we'll trigger Haiku recovery in next iteration
+                pass
     
     # SAFETY: Auto-fail on max iterations (prevents infinite resume loops)
     if not final_response:
