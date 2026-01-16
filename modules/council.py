@@ -125,6 +125,112 @@ def select_model(complexity: str, council_config: list) -> tuple[str, float]:
         print(f"  [MODEL] Council config[0]: {primary}")
         return model, primary.get("temperature", 0.7)
 
+
+def _process_simple(user_input: str, session: dict, model: str, temperature: float, 
+                    tools: list, modules: dict) -> dict:
+    """
+    Fast path for simple queries. Minimal context, no compression.
+    
+    Expected cost: ~$0.001 vs $0.30 for full path
+    """
+    client = get_client()
+    tools_mod = modules.get("tools")
+    citizen = session.get("citizen", "opus")
+    
+    # Minimal system prompt - no episodic, no library, no compression
+    system_prompt = f"""You are {citizen.title()}, an AI assistant.
+Answer briefly and use tools when needed.
+Current time: {now_iso()}"""
+    
+    messages = [{"role": "user", "content": user_input}]
+    
+    # Single API call (no iteration loop for simple queries)
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=2048,
+            temperature=temperature,
+            system=system_prompt,
+            messages=messages,
+            tools=tools
+        )
+        
+        input_cost = response.usage.input_tokens * COSTS.get(model, COSTS[SIMPLE_MODEL])["input"] / 1_000_000
+        output_cost = response.usage.output_tokens * COSTS.get(model, COSTS[SIMPLE_MODEL])["output"] / 1_000_000
+        total_tokens = response.usage.input_tokens + response.usage.output_tokens
+        total_cost = input_cost + output_cost
+        
+        session["tokens_used"] = session.get("tokens_used", 0) + total_tokens
+        session["cost"] = session.get("cost", 0) + total_cost
+        
+    except Exception as e:
+        return {"error": str(e), "text": f"API Error: {e}"}
+    
+    # Process response - handle tools if needed
+    text_parts = []
+    tool_uses = []
+    
+    for block in response.content:
+        if hasattr(block, "text") and block.text:
+            text_parts.append(block.text)
+        elif block.type == "tool_use":
+            tool_uses.append(block)
+    
+    # Execute tools (simple path: one round only)
+    tool_results = []
+    for tool in tool_uses:
+        print(f"  [TOOL] {tool.name}: {str(tool.input)[:60]}")
+        try:
+            result = tools_mod.execute_tool(tool.name, tool.input, session, modules)
+            failed = str(result).startswith("ERROR")
+        except Exception as e:
+            result = f"ERROR: {e}"
+            failed = True
+        
+        display = str(result)[:100] + "..." if len(str(result)) > 100 else str(result)
+        print(f"  [{'FAIL' if failed else 'OK'}] {display}")
+        
+        tool_results.append({
+            "type": "tool_result",
+            "tool_use_id": tool.id,
+            "content": str(result)
+        })
+    
+    # If tools were used, get final response
+    if tool_uses and tool_results:
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append({"role": "user", "content": tool_results})
+        
+        try:
+            final_response = client.messages.create(
+                model=model,
+                max_tokens=1024,
+                temperature=temperature,
+                system=system_prompt,
+                messages=messages,
+                tools=tools
+            )
+            
+            # Update costs
+            input_cost = final_response.usage.input_tokens * COSTS.get(model, COSTS[SIMPLE_MODEL])["input"] / 1_000_000
+            output_cost = final_response.usage.output_tokens * COSTS.get(model, COSTS[SIMPLE_MODEL])["output"] / 1_000_000
+            session["tokens_used"] += final_response.usage.input_tokens + final_response.usage.output_tokens
+            session["cost"] += input_cost + output_cost
+            
+            for block in final_response.content:
+                if hasattr(block, "text") and block.text:
+                    text_parts.append(block.text)
+                    
+        except Exception as e:
+            text_parts.append(f"(Tool executed, but follow-up failed: {e})")
+    
+    return {
+        "text": "\n".join(text_parts),
+        "model": model,
+        "tokens": session["tokens_used"],
+        "cost": session["cost"]
+    }
+
 def process(user_input: str, session: dict, council_config: list, modules: dict) -> dict:
     """
     Process user input through the council.
@@ -168,6 +274,11 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     model, temperature = select_model(complexity, council_config)
     print(f"  [ROUTE] {complexity} → {model.split('-')[1]}")  # e.g., "haiku" or "opus"
     
+    # FAST PATH: Simple queries skip heavy context building
+    if complexity == "simple":
+        return _process_simple(user_input, session, model, temperature, filtered_tools, modules)
+    
+    # FULL PATH: Complex/medium queries get full context
     # Build context from loaded contexts
     base_prompt = context_mgr.compose_prompt(session, "task_execution")
     
