@@ -181,7 +181,7 @@ def compose_prompt(session: dict, purpose: str, extra_content: str = "") -> str:
     # Include working context if task execution
     if purpose == "task_execution" and "working" in session["contexts"]:
         working = session["contexts"]["working"]
-        working_text = format_context_for_prompt(working, max_tokens=30000)
+        working_text = format_context_for_prompt(working, max_tokens=8000)  # Reduced from 30k
         parts.append(f"=== WORKING CONTEXT ===\n{working_text}")
     
     # Add extra content (task spec, etc.)

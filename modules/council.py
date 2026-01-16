@@ -23,8 +23,8 @@ import hashlib
 import anthropic
 from datetime import datetime, timezone
 from typing import Optional, List
-import daily_log
-import episodic_memory
+from modules import daily_log
+from modules import episodic_memory
 
 # Model costs per 1M tokens
 COSTS = {
@@ -174,7 +174,7 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     # CRITICAL: Inject episodic memory - this is the "soul"
     # Without this, the AI has semantic knowledge but no experiential texture
     try:
-        episodic_ctx = episodic_memory.build_episodic_context(session["citizen"], max_tokens=12000)
+        episodic_ctx = episodic_memory.build_episodic_context(session["citizen"], max_tokens=6000)
         if episodic_ctx and len(episodic_ctx) > 100:
             base_prompt += f"\n\n{episodic_ctx}"
             print(f"  [EPISODIC] Injected {len(episodic_ctx)} chars of experiential memory")
@@ -263,23 +263,40 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
     base_prompt += """
 
 === GUIDANCE ===
-If you're UNCERTAIN about the best approach:
-1. Use web_search to research (e.g., "C sorting algorithms comparison")
-2. After learning something useful, capture it with library_create
-3. Check experience_search for your past learnings
-
-If stuck, use task_stuck."""
+If UNCERTAIN: use web_search, then capture with library_create.
+If stuck: use task_stuck."""
     
-    # Build messages
+    # COMPRESS PROMPT: Apply semantic deduplication + NLP compression
+    # This happens AFTER full prompt is built, before API call
+    try:
+        from modules.prompt_compressor import compress_prompt
+        original_tokens = len(base_prompt) // 4
+        if original_tokens > 15000:  # Only compress if over threshold
+            base_prompt, comp_stats = compress_prompt(
+                base_prompt, 
+                target_tokens=18000,  # Leave room for user input
+                dedup_threshold=0.85,
+                aggressive_compress=True
+            )
+            print(f"  [COMPRESS] {comp_stats['original_tokens']} → {comp_stats['final_tokens']} tokens ({comp_stats['reduction_pct']}% reduction)")
+    except Exception as e:
+        print(f"  [COMPRESS] Skipped: {e}")
+    
+    # PROMPT CACHING: Separate static (cacheable) from dynamic content
+    # Static: identity, episodic, guidance - doesn't change within a wake
+    # Dynamic: user input, tool results - changes each iteration
+    static_system = base_prompt  # This is the cacheable part
+    
+    # Build messages - only dynamic content
     messages = []
     
-    # Add working context history
+    # Add working context history (prior conversation turns)
     working = session.get("contexts", {}).get("working", {})
-    for msg in working.get("messages", [])[-20:]:
+    for msg in working.get("messages", [])[-10:]:  # Reduced from 20
         messages.append(msg)
     
-    # Add user input
-    messages.append({"role": "user", "content": f"{base_prompt}\n\n=== CURRENT INPUT ===\n{user_input}"})
+    # Add user input as separate message (not combined with base_prompt!)
+    messages.append({"role": "user", "content": user_input})
     
     # Model already selected by router above
     
@@ -288,44 +305,103 @@ If stuck, use task_stuck."""
     final_response = None
     tool_call_counts = {}  # Track repeated calls: {hash: count}
     tool_calls_log = []    # Accumulate tool calls for daily log
-    cost_warning_given = False
+    
+    # Build system with cache control
+    system_with_cache = [
+        {
+            "type": "text",
+            "text": static_system,
+            "cache_control": {"type": "ephemeral"}
+        }
+    ]
+    
+    # Track all tool results for final synthesis
+    all_tool_results = []
+    first_response_text = ""
+    actual_api_calls = 0  # Safety counter
     
     while iteration < MAX_ITERATIONS:
         iteration += 1
+        actual_api_calls += 1
         
-        # SAFETY: At 80% cost, tell AI to wrap up
-        if not cost_warning_given and session.get("cost", 0) > MAX_COST_PER_WAKE * 0.8:
-            print(f"  [COST WARNING] At 80% - telling AI to wrap up")
-            cost_warning_given = True
-            # Inject wrap-up instruction
-            messages.append({
-                "role": "user", 
-                "content": "[SYSTEM: You are at 80% of your cost budget for this wake. Please wrap up your current work and provide your conclusions. Do not start new investigations.]"
-            })
+        # SAFETY: Hard limit on API calls
+        if actual_api_calls > MAX_ITERATIONS:
+            print(f"  [SAFETY] Max API calls reached")
+            break
         
-        # SAFETY: Hard stop at limit
+        # SAFETY: Cost checks
         if session.get("cost", 0) > MAX_COST_PER_WAKE:
             print(f"  [COST LIMIT] ${session['cost']:.2f} - hard stop")
             break
         
         try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=8192,
-                temperature=temperature,
-                messages=messages,
-                tools=filtered_tools  # Use filtered tools, not all tools
-            )
+            # Model selection:
+            # - First call or success continuation → main model (Opus, cached)
+            # - After failure → Haiku for recovery (minimal context)
+            use_recovery_mode = iteration > 1 and any(r.get("failed") for r in all_tool_results[-10:])
+            
+            if not use_recovery_mode:
+                # MAIN PATH: Opus with cached context
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=8192,
+                    temperature=temperature,
+                    system=system_with_cache,
+                    messages=messages,
+                    tools=filtered_tools
+                )
+                iter_costs = COSTS.get(model, COSTS["claude-sonnet-4-5-20250929"])
+                
+                # Cache stats (only meaningful on first call)
+                if iteration == 1:
+                    cache_read = getattr(response.usage, 'cache_read_input_tokens', 0)
+                    cache_creation = getattr(response.usage, 'cache_creation_input_tokens', 0)
+                    fresh_input = response.usage.input_tokens - cache_read - cache_creation
+                    print(f"  [CACHE] Creating: {cache_creation}, Read: {cache_read}, Fresh: {fresh_input}")
+                    input_cost = (
+                        fresh_input * iter_costs["input"] +
+                        cache_read * iter_costs["input"] * 0.1 +
+                        cache_creation * iter_costs["input"] * 1.25
+                    ) / 1_000_000
+                else:
+                    # Subsequent calls benefit from cache
+                    cache_read = getattr(response.usage, 'cache_read_input_tokens', 0)
+                    if cache_read > 0:
+                        print(f"  [CACHE HIT] {cache_read} tokens cached")
+                    input_cost = response.usage.input_tokens * iter_costs["input"] * 0.1 / 1_000_000  # Mostly cached
+                
+            else:
+                # RECOVERY PATH: Haiku with minimal context
+                failed_tools = [r for r in all_tool_results[-5:] if r.get("failed")]
+                failed_summary = "\n".join([
+                    f"- {r['tool']}: FAILED - {r['result'][:200]}" for r in failed_tools
+                ])
+                
+                recovery_prompt = f"""A tool failed. Task: {user_input[:200]}
+
+Failed:
+{failed_summary}
+
+Options: 1) Different tool to work around, 2) TASK_STUCK if unrecoverable, 3) TASK_COMPLETE if acceptable"""
+
+                print(f"  [RECOVERY] Haiku for error handling")
+                response = client.messages.create(
+                    model=SIMPLE_MODEL,
+                    max_tokens=2048,
+                    temperature=0.2,
+                    messages=[{"role": "user", "content": recovery_prompt}],
+                    tools=filtered_tools
+                )
+                iter_costs = COSTS.get(SIMPLE_MODEL, COSTS["claude-haiku-4-5-20251001"])
+                input_cost = response.usage.input_tokens * iter_costs["input"] / 1_000_000
+        
         except Exception as e:
             return {"error": str(e), "text": f"API Error: {e}"}
         
         # Track costs
-        costs = COSTS.get(model, COSTS["claude-sonnet-4-5-20250929"])
-        session["tokens_used"] = session.get("tokens_used", 0) + \
-            response.usage.input_tokens + response.usage.output_tokens
-        session["cost"] = session.get("cost", 0) + \
-            (response.usage.input_tokens * costs["input"] + 
-             response.usage.output_tokens * costs["output"]) / 1_000_000
+        output_cost = response.usage.output_tokens * iter_costs["output"] / 1_000_000
+        session["tokens_used"] = session.get("tokens_used", 0) + response.usage.input_tokens + response.usage.output_tokens
+        session["cost"] = session.get("cost", 0) + input_cost + output_cost
         
         # Process response
         text_parts = []
@@ -337,38 +413,56 @@ If stuck, use task_stuck."""
             elif block.type == "tool_use":
                 tool_uses.append(block)
         
-        # Store assistant response
+        # Save first response text for final output
+        if iteration == 1 and text_parts:
+            first_response_text = "\n".join(text_parts)
+        
+        # Append to messages (needed for proper API flow)
         messages.append({"role": "assistant", "content": response.content})
         
         # If no tool use, we're done
         if response.stop_reason == "end_turn" or not tool_uses:
+            response_text = "\n".join(text_parts)
             final_response = {
-                "text": "\n".join(text_parts),
+                "text": first_response_text + "\n\n" + response_text if first_response_text and response_text else (first_response_text or response_text),
                 "model": model,
                 "tokens": session["tokens_used"],
                 "cost": session["cost"]
             }
             break
         
-        # Execute tools with deduplication tracking
+        # Execute tools - STOP ON FIRST ERROR
         tool_results = []
+        any_failed = False
+        
         for tool in tool_uses:
             # SAFETY: Track repeated identical calls
             call_hash = tool_call_hash(tool.name, tool.input)
             tool_call_counts[call_hash] = tool_call_counts.get(call_hash, 0) + 1
             
             if tool_call_counts[call_hash] > MAX_TOOL_REPEATS:
-                print(f"  [WARN] {tool.name} called {tool_call_counts[call_hash]} times with same args")
-                result = f"WARNING: You've called {tool.name} {tool_call_counts[call_hash]} times with identical arguments. This suggests a loop. Try a different approach or use task_stuck if you're blocked."
+                print(f"  [WARN] {tool.name} repeated {tool_call_counts[call_hash]}x - loop detected")
+                result = "ERROR: Loop detected. Use task_stuck."
+                failed = True
             else:
-                print(f"  [TOOL] {tool.name}: {tool.input}")
-                result = tools_mod.execute_tool(
-                    tool.name, 
-                    tool.input, 
-                    session, 
-                    modules
-                )
-                print(f"  [RESULT] {result}")
+                print(f"  [TOOL] {tool.name}: {str(tool.input)[:80]}")
+                try:
+                    result = tools_mod.execute_tool(tool.name, tool.input, session, modules)
+                    failed = str(result).startswith("ERROR")
+                except Exception as e:
+                    result = f"ERROR: {e}"
+                    failed = True
+                
+                display = str(result)[:150] + "..." if len(str(result)) > 150 else str(result)
+                print(f"  [{'FAIL' if failed else 'OK'}] {display}")
+            
+            # Track result
+            all_tool_results.append({
+                "tool": tool.name,
+                "args": tool.input,
+                "result": str(result),
+                "failed": failed
+            })
             
             tool_results.append({
                 "type": "tool_result",
@@ -376,7 +470,7 @@ If stuck, use task_stuck."""
                 "content": str(result)
             })
             
-            # Log tool call for daily log
+            # Log
             tool_calls_log.append(daily_log.log_tool_call(
                 citizen=session["citizen"],
                 wake_num=session.get("wake_num", 0),
@@ -386,16 +480,15 @@ If stuck, use task_stuck."""
                 iteration=iteration
             ))
             
-            # Log action (full result for session, truncated only for display)
             session["actions"] = session.get("actions", [])
             session["actions"].append({
                 "tool": tool.name,
                 "input": tool.input,
-                "result": str(result),  # Full result
+                "result": str(result),
                 "time": now_iso()
             })
             
-            # Check for task completion signals
+            # Check for explicit completion
             if "TASK_COMPLETE" in str(result) or "TASK_STUCK" in str(result):
                 final_response = {
                     "text": str(result),
@@ -405,12 +498,62 @@ If stuck, use task_stuck."""
                     "task_ended": True
                 }
                 break
+            
+            # STOP ON FIRST ERROR - don't waste time on subsequent tools
+            if failed:
+                any_failed = True
+                print(f"  [STOP] Error encountered, skipping remaining {len(tool_uses) - len(tool_results)} tools")
+                # Add placeholder results for remaining tools so API is happy
+                for remaining_tool in tool_uses[len(tool_results):]:
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": remaining_tool.id,
+                        "content": "SKIPPED: Previous tool failed"
+                    })
+                break
         
         if final_response:
             break
         
         # Add tool results for next iteration
         messages.append({"role": "user", "content": tool_results})
+        
+        # OPTIMIZATION: Skip API call if we can detect completion
+        # Terminal tools that indicate "task is done"
+        TERMINAL_TOOLS = {"task_complete", "task_stuck", "github_commit", "github_pr_create"}
+        last_tool = tool_uses[-1].name if tool_uses else None
+        
+        # Completion indicators in Opus's response text
+        completion_phrases = ["will complete", "this fixes", "should fix", "will fix", 
+                             "task complete", "that's all", "done", "finished"]
+        text_suggests_done = any(p in first_response_text.lower() for p in completion_phrases)
+        
+        if not any_failed:
+            if last_tool in TERMINAL_TOOLS:
+                # Explicitly terminal tool - we're done
+                print(f"  [DONE] Terminal tool {last_tool} succeeded")
+                final_response = {
+                    "text": first_response_text + f"\n\n[Completed via {last_tool}]",
+                    "model": model,
+                    "tokens": session["tokens_used"],
+                    "cost": session["cost"]
+                }
+                break
+            elif text_suggests_done and iteration >= 2:
+                # Opus suggested completion and we've done some work
+                print(f"  [DONE] All tools succeeded and text suggests completion")
+                final_response = {
+                    "text": first_response_text + "\n\n[Tools executed successfully]",
+                    "model": model,
+                    "tokens": session["tokens_used"],
+                    "cost": session["cost"]
+                }
+                break
+            else:
+                # Need to check with Opus if there's more to do - but use cache
+                # Don't reset iteration, just note we should use main model
+                pass  # Next iteration still uses main model (iteration check is below)
+        # If any_failed, we'll trigger Haiku recovery in next iteration
     
     # SAFETY: Auto-fail on max iterations (prevents infinite resume loops)
     if not final_response:

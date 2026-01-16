@@ -3,17 +3,14 @@ Tool Selector - Let Haiku pick relevant tools for each task.
 
 NOT hardcoded allowlists. AI reads tool descriptions and decides.
 
-Why:
-- Scales to any number of tools (including dynamic ones)
-- AI learns what tools are useful for what
-- DRY - one selector, not N allowlists
-- Same pattern as Library module selection
+OPTIMIZATION: Tool list is formatted once and cached since tools are static.
 """
 
 import os
 from anthropic import Anthropic
 
 _client = None
+_cached_tool_list = None  # Cache formatted tool list
 
 def get_client():
     global _client
@@ -28,9 +25,9 @@ def format_tools_brief(tools: list) -> str:
     for t in tools:
         name = t.get("name", "unknown")
         desc = t.get("description", "")
-        # First sentence only
-        short = desc.split(".")[0][:60] if desc else "no description"
-        lines.append(f"  {name}: {short}")
+        # First sentence only, truncated
+        short = desc.split(".")[0][:50] if desc else "no desc"
+        lines.append(f"{name}: {short}")
     return "\n".join(lines)
 
 
@@ -40,22 +37,23 @@ def select_tools(task_description: str, all_tools: list, max_tools: int = 12) ->
     
     Returns filtered list of tool definitions.
     """
+    global _cached_tool_list
+    
     if len(all_tools) <= max_tools:
         return all_tools
     
     # Always include core tools
-    core = {"task_complete", "task_stuck"}
+    core = {"task_complete", "task_stuck", "task_start"}
     
-    tool_list = format_tools_brief(all_tools)
+    # Cache tool list (tools don't change during runtime)
+    if _cached_tool_list is None:
+        _cached_tool_list = format_tools_brief(all_tools)
     
-    prompt = f"""Select tools for this task. Return ONLY tool names, one per line.
+    prompt = f"""Pick tools for: {task_description[:100]}
 
-TASK: {task_description}
+{_cached_tool_list}
 
-TOOLS:
-{tool_list}
-
-Select up to {max_tools - len(core)} most relevant tools."""
+Return ONLY names, one per line. Max {max_tools - len(core)}."""
 
     try:
         client = get_client()

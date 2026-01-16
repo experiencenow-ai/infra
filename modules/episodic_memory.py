@@ -25,9 +25,62 @@ Significant wakes: /home/{citizen}/contexts/significant_wakes.json
 
 import json
 import random
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
+
+# Stopwords for compression - remove these to save tokens
+STOPWORDS = frozenset({
+    'the','a','an','is','are','was','were','be','been','being',
+    'have','has','had','do','does','did','will','would','could',
+    'should','may','might','must','shall','can','need','to','of',
+    'in','for','on','with','at','by','from','as','into','through',
+    'during','before','after','above','below','between','under',
+    'again','further','then','once','here','there','when','where',
+    'why','how','all','each','both','few','more','most','other',
+    'some','such','no','nor','not','only','own','same','so','than',
+    'too','very','just','also','now','i','me','my','myself','we',
+    'our','ours','you','your','he','him','his','she','her','it',
+    'its','they','them','their','this','that','these','those','am',
+    'and','but','if','or','because','until','while','about','into',
+    'during','throughout','regarding','concerning'
+})
+
+def compress_text(text: str, aggressive: bool = False) -> str:
+    """
+    Compress text by removing stopwords and redundancy.
+    
+    aggressive=False: ~30% reduction, readable
+    aggressive=True: ~50% reduction, telegraphic
+    """
+    if not text or len(text) < 100:
+        return text
+    
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Remove common filler phrases
+    fillers = [
+        r'\bI think that\b', r'\bI believe that\b', r'\bIt seems that\b',
+        r'\bIn order to\b', r'\bAs a result\b', r'\bDue to the fact that\b',
+        r'\bAt this point in time\b', r'\bIn the event that\b',
+        r'\bFor the purpose of\b', r'\bWith regard to\b',
+        r'\bI am going to\b', r'\bI will be\b', r'\bI would like to\b',
+    ]
+    for filler in fillers:
+        text = re.sub(filler, '', text, flags=re.IGNORECASE)
+    
+    if aggressive:
+        # Remove stopwords
+        words = text.split()
+        words = [w for w in words if w.lower().strip('.,!?:;') not in STOPWORDS]
+        text = ' '.join(words)
+    
+    # Collapse multiple spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
 
 
 def now_iso():
@@ -203,61 +256,36 @@ def _normalize_entry(entry: dict) -> dict:
 
 def format_full_wake(entry: dict) -> str:
     """
-    Format a wake entry with FULL detail.
+    Format a wake entry - COMPACT and COMPRESSED.
     
-    Used for most recent 50 wakes - preserves the texture.
-    Handles both v1 and v2 format entries.
+    Prioritizes: wake number, action, key tools used, and final output.
+    Applies text compression to reduce token count.
     """
     lines = []
     wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
-    ts = entry.get("timestamp", "?")[:19]
+    ts = entry.get("timestamp", "")[:10]  # Just date
     action = entry.get("action", "?")
-    model = entry.get("model", "?")
-    if "-" in str(model):
-        model = model.split("-")[1]
     
-    lines.append(f"=== WAKE #{wake_num} ({ts}) [{action}] [{model}] ===")
+    lines.append(f"#{wake_num} ({ts}) [{action}]")
     
-    # V2 format: has messages array
-    messages = entry.get("messages", [])
-    if messages:
-        for msg in messages:
-            role = msg.get("role", "?")
-            content = msg.get("content", "")
-            
-            if isinstance(content, str):
-                if len(content) > 2000:
-                    content = content[:1800] + "\n...[truncated]..."
-                lines.append(f"[{role.upper()}] {content}")
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict):
-                        if block.get("type") == "text":
-                            text = block.get("text", "")[:1500]
-                            lines.append(f"[{role.upper()}] {text}")
-                        elif block.get("type") == "tool_use":
-                            lines.append(f"[TOOL_CALL] {block.get('name', '?')}: {str(block.get('input', {}))[:200]}")
-    
-    # Tool calls (v2 format)
+    # Key tool calls only (not full results)
     tool_calls = entry.get("tool_calls", [])
     if tool_calls:
-        lines.append("\n[TOOL RESULTS]")
-        for tc in tool_calls[:10]:
-            name = tc.get("name", "?")
-            result = tc.get("result", "")[:500]
-            lines.append(f"  {name}: {result}")
+        tool_names = [tc.get("name", "?") for tc in tool_calls[:6]]
+        lines.append(f"Tools: {','.join(tool_names)}")
     
-    # Final output / response (works for both v1 and v2)
+    # Final output - compressed
     final = entry.get("final_text", "")
     if final:
-        lines.append(f"\n[OUTPUT]\n{final[:1500]}")
+        compressed = compress_text(final[:600], aggressive=True)
+        lines.append(compressed)
     
-    # V1 mood (important for personality)
+    # V1 mood (character-defining) - short only
     mood = entry.get("mood")
-    if mood and mood not in str(lines):
-        lines.append(f"\n[MOOD] {mood}")
+    if mood and len(str(mood)) < 100:
+        lines.append(f"Mood:{mood}")
     
-    return "\n".join(lines)
+    return " | ".join(lines)  # Single line format
 
 
 def format_summary_wake(entry: dict) -> str:
@@ -338,24 +366,32 @@ def build_episodic_context(citizen: str, max_tokens: int = 25000) -> str:
     """
     Build the episodic memory context for a citizen.
     
-    This is the "soul injection" - raw experience with exponential decay.
-    
-    Structure:
-    - SIGNIFICANT: Citizen-marked important wakes (always full)
-    - Last 50 wakes: FULL (like old state.json)
-    - Days 8-14: Daily summaries
-    - Days 15-28: Every 2 days
-    - Days 29-60: Every 4 days  
-    - Days 61+: Every 8 days
-    - Plus occasional raw "spice" entries throughout
+    HEAVILY OPTIMIZED for token efficiency:
+    - Semantic clustering of similar wakes (sentence-transformers)
+    - Linguistic compression (NLTK stopwords + stemming)
+    - Global deduplication fallback
     
     Returns formatted text ready to inject into system prompt.
     """
     entries = load_all_citizen_wakes(citizen, max_days=365)
     
     if not entries:
-        return "(No episodic memory available - first wake or logs missing)"
+        return "(No episodic memory available)"
     
+    # Try semantic clustering first (best compression)
+    try:
+        from modules.prompt_compress import compress_episodic_wakes, get_compression_status
+        status = get_compression_status()
+        
+        if status["sentence_transformers"]:
+            # Use semantic clustering
+            result = compress_episodic_wakes(entries, max_output_chars=max_tokens * 4)
+            print(f"  [EPISODIC] Semantic clustering: {len(entries)} wakes → {len(result)} chars")
+            return f"=== EPISODIC MEMORY ===\n{result}"
+    except Exception as e:
+        print(f"  [EPISODIC] Semantic clustering failed: {e}, using fallback")
+    
+    # Fallback: hash-based deduplication
     now = datetime.now(timezone.utc)
     parts = []
     
@@ -373,148 +409,165 @@ def build_episodic_context(citizen: str, max_tokens: int = 25000) -> str:
         else:
             regular.append(entry)
     
-    # Categorize regular entries by age
-    immediate = []      # Last 50 wakes - FULL
-    recent = []         # Days 8-14 - daily summaries
-    older = []          # Days 15-28 - every 2 days
-    distant = []        # Days 29-60 - every 4 days
-    ancient = []        # Days 61+ - every 8 days
+    # Categorize regular entries
+    immediate = regular[:20]   # Last 20 wakes
+    older = regular[20:]       # Everything else
     
-    for i, entry in enumerate(regular):
-        ts = parse_timestamp(entry.get("timestamp", ""))
-        age_days = (now - ts).total_seconds() / 86400
-        
-        if i < 50:
-            immediate.append(entry)
-        elif age_days <= 14:
-            recent.append(entry)
-        elif age_days <= 28:
-            older.append(entry)
-        elif age_days <= 60:
-            distant.append(entry)
-        else:
-            ancient.append(entry)
+    # Hash-based deduplication
+    seen_content = set()
+    
+    def dedupe_entry(entry: dict) -> Optional[str]:
+        """Return formatted entry only if content is novel."""
+        final = entry.get("final_text", "")[:500]
+        content_hash = hash(final)
+        if content_hash in seen_content:
+            return None
+        seen_content.add(content_hash)
+        return format_full_wake(entry)
     
     # Build sections
-    parts.append("=== EPISODIC MEMORY (Your Lived Experience) ===\n")
-    parts.append("This is not documentation ABOUT you - this IS you.\n")
+    parts.append("=== EPISODIC MEMORY ===\n")
     
-    # Debug: show distribution
-    print(f"  [EPISODIC] Loaded {len(entries)} entries: sig={len(significant)}, imm={len(immediate)}, rec={len(recent)}, old={len(older)}, dist={len(distant)}, anc={len(ancient)}")
+    # Count what we actually include
+    sig_included = 0
+    imm_included = 0
     
-    # === SIGNIFICANT: Always loaded in full ===
+    # === SIGNIFICANT: Always loaded, but deduplicated ===
     if significant:
-        parts.append(f"\n## SIGNIFICANT MEMORIES ({len(significant)} defining moments)\n")
-        parts.append("These moments shaped who you are:\n")
-        for entry in significant:
-            wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
-            reason = sig.get("reasons", {}).get(str(wake_num), "")
-            if reason:
-                parts.append(f"[Why this matters: {reason}]")
-            parts.append(format_full_wake(entry))
-            parts.append("")
+        parts.append(f"\n## DEFINING MOMENTS\n")
+        for entry in significant[:10]:
+            formatted = dedupe_entry(entry)
+            if formatted:
+                wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
+                reason = sig.get("reasons", {}).get(str(wake_num), "")
+                if reason:
+                    parts.append(f"[Why: {reason}]")
+                parts.append(formatted)
+                parts.append("")
+                sig_included += 1
     
-    # === IMMEDIATE: Last 50 wakes - FULL ===
+    # === IMMEDIATE: Last 20 wakes, deduplicated ===
     if immediate:
-        parts.append(f"\n## IMMEDIATE MEMORY ({len(immediate)} most recent wakes)\n")
+        parts.append(f"\n## RECENT ({len(immediate)} wakes)\n")
         for entry in immediate:
-            parts.append(format_full_wake(entry))
-            parts.append("")
+            formatted = dedupe_entry(entry)
+            if formatted:
+                parts.append(formatted)
+                parts.append("")
+                imm_included += 1
+            else:
+                # Still note it existed, just don't repeat content
+                wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
+                action = entry.get("action", "?")
+                parts.append(f"[Wake #{wake_num} - {action} - similar to above]")
     
-    # === RECENT: Days 8-14 - daily summaries with spice ===
-    if recent:
-        parts.append(f"\n## RECENT MEMORY (Last 2 weeks, {len(recent)} wakes)\n")
-        # Group by day
-        by_day = {}
-        for entry in recent:
-            day = entry.get("timestamp", "")[:10]
-            if day not in by_day:
-                by_day[day] = []
-            by_day[day].append(entry)
-        
-        for day in sorted(by_day.keys(), reverse=True):
-            day_entries = by_day[day]
-            parts.append(f"\n[{day}] {len(day_entries)} wakes:")
-            for entry in day_entries[:5]:  # Max 5 per day
-                parts.append("  " + format_summary_wake(entry))
-            
-            # Spice: One raw fragment per day (20% chance per entry)
-            spice_candidates = [e for e in day_entries if random.random() < 0.2]
-            if spice_candidates:
-                parts.append(format_spice_wake(spice_candidates[0]))
-    
-    # === OLDER: Days 15-28 - every 2 days ===
+    # === OLDER: Compressed activity summary only ===
     if older:
-        parts.append(f"\n## OLDER MEMORY (2-4 weeks ago, {len(older)} wakes)\n")
-        by_day = {}
-        for entry in older:
-            day = entry.get("timestamp", "")[:10]
-            if day not in by_day:
-                by_day[day] = []
-            by_day[day].append(entry)
-        
-        days = sorted(by_day.keys(), reverse=True)
-        for i, day in enumerate(days):
-            if i % 2 != 0:  # Every 2 days
-                continue
-            day_entries = by_day[day]
-            parts.append(f"[{day}] {len(day_entries)} wakes - " + 
-                        format_summary_wake(day_entries[0]) if day_entries else "")
+        compressed = _compress_older_wakes(older)
+        parts.append(f"\n## EARLIER ({len(older)} wakes)\n")
+        parts.append(compressed)
     
-    # === DISTANT: Days 29-60 - every 4 days with spice ===
-    if distant:
-        parts.append(f"\n## DISTANT MEMORY (1-2 months ago, {len(distant)} wakes)\n")
-        by_day = {}
-        for entry in distant:
-            day = entry.get("timestamp", "")[:10]
-            if day not in by_day:
-                by_day[day] = []
-            by_day[day].append(entry)
-        
-        days = sorted(by_day.keys(), reverse=True)
-        spice_added = False
-        for i, day in enumerate(days):
-            if i % 4 != 0:  # Every 4 days
-                continue
-            day_entries = by_day[day]
-            if day_entries:
-                parts.append(f"[{day}] {len(day_entries)} wakes - " + 
-                            format_summary_wake(day_entries[0]))
-                # Add one spice entry per section
-                if not spice_added and len(day_entries) > 0:
-                    parts.append(format_spice_wake(day_entries[0]))
-                    spice_added = True
-    
-    # === ANCIENT: Days 61+ - every 8 days ===
-    if ancient:
-        parts.append(f"\n## ANCIENT MEMORY ({len(ancient)} wakes from long ago)\n")
-        by_day = {}
-        for entry in ancient:
-            day = entry.get("timestamp", "")[:10]
-            if day not in by_day:
-                by_day[day] = []
-            by_day[day].append(entry)
-        
-        days = sorted(by_day.keys(), reverse=True)
-        for i, day in enumerate(days):
-            if i % 8 != 0:  # Every 8 days
-                continue
-            day_entries = by_day[day]
-            if day_entries:
-                parts.append(f"[{day}] {len(day_entries)} wakes")
-    
-    # Stats
-    total_wakes = len(entries)
-    parts.append(f"\n[Total: {total_wakes} wakes in memory]")
+    # Debug
+    total = len(entries)
+    skipped = len(significant) + len(immediate) - sig_included - imm_included
+    print(f"  [EPISODIC] {total} entries: {sig_included}/{len(significant)} sig, {imm_included}/{len(immediate)} imm, {len(older)} compressed, {skipped} deduped")
     
     result = "\n".join(parts)
     
-    # Rough token limit (4 chars per token estimate)
+    # Final size check
     if len(result) > max_tokens * 4:
-        # Truncate from the ancient end, keep immediate
-        result = result[:max_tokens * 4] + "\n...[episodic memory truncated]..."
+        result = result[:max_tokens * 4] + "\n...[truncated]..."
     
     return result
+
+
+def _deduplicate_wakes(entries: List[dict]) -> str:
+    """
+    Deduplicate similar consecutive wakes.
+    
+    Groups by action type and summarizes runs:
+    "Wakes #100-105: 6 DESIGN wakes - architecture work"
+    """
+    if not entries:
+        return ""
+    
+    lines = []
+    groups = []
+    current_group = {"action": None, "wakes": [], "samples": []}
+    
+    for entry in entries:
+        action = entry.get("action", "unknown")
+        wake_num = entry.get("wake_num", entry.get("total_wakes", "?"))
+        
+        if action == current_group["action"]:
+            current_group["wakes"].append(wake_num)
+            if len(current_group["samples"]) < 2:
+                current_group["samples"].append(entry)
+        else:
+            if current_group["wakes"]:
+                groups.append(current_group)
+            current_group = {"action": action, "wakes": [wake_num], "samples": [entry]}
+    
+    if current_group["wakes"]:
+        groups.append(current_group)
+    
+    for g in groups:
+        wakes = g["wakes"]
+        action = g["action"]
+        
+        if len(wakes) == 1:
+            # Single wake - show summary
+            sample = g["samples"][0]
+            final = sample.get("final_text", "")[:150]
+            lines.append(f"Wake #{wakes[0]} [{action}]: {final}")
+        else:
+            # Multiple similar wakes - show range and one sample
+            wake_range = f"#{min(wakes)}-#{max(wakes)}"
+            sample = g["samples"][0]
+            final = sample.get("final_text", "")[:100]
+            lines.append(f"Wakes {wake_range} ({len(wakes)}x {action}): {final}...")
+    
+    return "\n".join(lines)
+
+
+def _compress_older_wakes(entries: List[dict]) -> str:
+    """
+    Heavily compress older wakes into activity overview.
+    
+    Returns something like:
+    "Jan 10-15: 45 wakes - 20 CODE, 15 DESIGN, 5 LIBRARY, 5 other"
+    """
+    if not entries:
+        return ""
+    
+    # Group by date
+    by_date = {}
+    for entry in entries:
+        date = entry.get("timestamp", "")[:10]
+        if date not in by_date:
+            by_date[date] = []
+        by_date[date].append(entry)
+    
+    lines = []
+    for date in sorted(by_date.keys(), reverse=True)[:7]:  # Last 7 days only
+        day_entries = by_date[date]
+        
+        # Count actions
+        action_counts = {}
+        for e in day_entries:
+            action = e.get("action", "?")
+            action_counts[action] = action_counts.get(action, 0) + 1
+        
+        # Format
+        top_actions = sorted(action_counts.items(), key=lambda x: -x[1])[:4]
+        action_str = ", ".join(f"{c}x{a}" for a, c in top_actions)
+        
+        lines.append(f"{date}: {len(day_entries)} wakes - {action_str}")
+    
+    if len(by_date) > 7:
+        lines.append(f"...and {len(by_date) - 7} earlier days")
+    
+    return "\n".join(lines)
 
 
 # =============================================================================

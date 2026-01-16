@@ -365,16 +365,16 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "library_propose",
-        "description": "Propose a new module or update for the Library",
+        "description": "Propose a module for Library. MAX 2000 tokens (~8000 chars). Must be DENSE: bullets not prose, no fluff, technical facts only. Will be rejected if too verbose.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Module name (lowercase, no spaces)"},
+                "name": {"type": "string", "description": "Module name (lowercase, underscores)"},
                 "domain": {"type": "string", "description": "Domain (git, email, python, unix, etc)"},
-                "description": {"type": "string", "description": "Short description"},
-                "knowledge": {"type": "string", "description": "Core knowledge, concepts, best practices"},
-                "examples": {"type": "string", "description": "Example code and solutions"},
-                "patterns": {"type": "string", "description": "Patterns to apply"}
+                "description": {"type": "string", "description": "One line summary"},
+                "knowledge": {"type": "string", "description": "Bullet points of non-obvious facts. No prose."},
+                "examples": {"type": "string", "description": "Minimal code. Only essential patterns."},
+                "patterns": {"type": "string", "description": "When to apply, gotchas"}
             },
             "required": ["name", "domain", "knowledge"]
         }
@@ -2337,7 +2337,15 @@ Use this expertise to solve the current problem.
 
 
 def library_propose(args: dict, session: dict, modules_dict: dict) -> str:
-    """Propose a new module for the Library."""
+    """Propose a new module for the Library.
+    
+    LIBRARY MODULE REQUIREMENTS:
+    - MAX 2000 tokens (~8000 chars) total
+    - Dense, technical content - no fluff
+    - Bullet points, not prose
+    - Code examples must be minimal and essential
+    - Every line should teach something
+    """
     name = args.get("name", "").lower().replace(" ", "_")
     domain = args.get("domain", "")
     description = args.get("description", "")
@@ -2347,6 +2355,43 @@ def library_propose(args: dict, session: dict, modules_dict: dict) -> str:
     citizen = session["citizen"]
     if not name or not domain or not knowledge:
         return "ERROR: name, domain, and knowledge required"
+    
+    # SIZE ENFORCEMENT
+    MAX_CHARS = 8000  # ~2000 tokens
+    total_chars = len(description) + len(knowledge) + len(examples) + len(patterns)
+    if total_chars > MAX_CHARS:
+        return f"""ERROR: Module too large ({total_chars} chars, max {MAX_CHARS})
+
+LIBRARY MODULES MUST BE DENSE AND COMPACT:
+- Cut prose, use bullets
+- Remove obvious/basic info
+- Keep only non-obvious insights
+- Minimal code examples (essential patterns only)
+- Every line must add value
+
+Current sizes:
+- description: {len(description)} chars
+- knowledge: {len(knowledge)} chars  
+- examples: {len(examples)} chars
+- patterns: {len(patterns)} chars
+
+Compress to under {MAX_CHARS} total chars."""
+
+    # QUALITY HINTS
+    if len(knowledge) > 0:
+        lines = knowledge.split('\n')
+        prose_lines = [l for l in lines if len(l) > 100 and not l.strip().startswith(('-', '*', '•', '#'))]
+        if len(prose_lines) > 3:
+            return f"""ERROR: Knowledge section has too much prose ({len(prose_lines)} long lines)
+
+LIBRARY MODULES MUST BE:
+- Bullet points, not paragraphs
+- Dense technical facts
+- No explanatory prose
+- No "Claude should..." or "This module..."
+
+Reformat as terse bullets."""
+
     module_data = {
         "name": name,
         "domain": domain,
@@ -2355,7 +2400,8 @@ def library_propose(args: dict, session: dict, modules_dict: dict) -> str:
         "examples": examples,
         "patterns": patterns,
         "author": citizen,
-        "created_at": now_iso()
+        "created_at": now_iso(),
+        "char_count": total_chars
     }
     pr_id = library.propose_module(name, module_data, citizen)
     # Notify maintainer if exists
@@ -2381,7 +2427,7 @@ def library_propose(args: dict, session: dict, modules_dict: dict) -> str:
                 )
             except:
                 pass
-    return f"LIBRARY_PR_CREATED: {pr_id}\nModule: {name}\nDomain: {domain}\nMaintainer: {maintainer or '(none assigned)'}\n>2/3 approval required to merge."
+    return f"LIBRARY_PR_CREATED: {pr_id}\nModule: {name} ({total_chars} chars)\nDomain: {domain}\nMaintainer: {maintainer or '(none assigned)'}\n>2/3 approval required to merge."
 
 
 def library_review(args: dict, session: dict, modules_dict: dict) -> str:

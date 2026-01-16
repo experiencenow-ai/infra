@@ -5,7 +5,7 @@
   "templates": {
     "reflection": {
       "title": "REFLECTION WAKE",
-      "prompt": "=== REFLECTION WAKE ===\n\nThis is your reflection time. Focus on:\n\n1. IDENTITY CHECK\n   - Who am I? Review your identity context briefly.\n   - Any drift from core values?\n   - Any new insights about yourself?\n\n2. DREAM REVIEW\n   - Process recent experiences\n   - Extract patterns and learnings\n   - Archive completed thoughts\n\n3. GOAL ALIGNMENT\n   - Are current goals still relevant?\n   - Any goals completed but not marked?\n   - Priority adjustments needed?\n\nOutput: Brief reflection notes (2-3 paragraphs max). Do NOT start new tasks."
+      "prompt": "=== REFLECTION WAKE ===\n\nQuick internal check (5 min max):\n\n1. DRIFT CHECK: Am I working on the right things?\n2. GOAL CHECK: Any goals done but not marked? Any stale?\n3. INSIGHT: One concrete learning from recent work.\n\nOUTPUT: 3-5 bullet points max. No philosophy. No essays.\nIf nothing notable: \"No drift. Goals current. Continuing.\""
     },
     
     "peer_monitor": {
@@ -15,7 +15,7 @@
     
     "library": {
       "title": "LIBRARY WAKE",
-      "prompt": "=== LIBRARY WAKE ===\nDomains: {domains}\n\nYour library maintenance responsibilities:\n\n1. DOMAIN HEALTH CHECK\n   - List modules in your domains\n   - Check for outdated content\n   - Identify gaps in coverage\n\n2. PR REVIEW\n   - Check pending PRs in your domains\n   - Review and provide feedback\n   - Approve/reject with clear reasoning\n\n3. MODULE UPDATES\n   - Any improvements to propose?\n   - New patterns to document?\n   - Errors to correct?\n\n4. SKILL FILE SYNC\n   - Are SKILL.md files current?\n   - Need imports from /mnt/skills?\n\nOUTPUT: List actions taken or \"No action needed\" with brief reason."
+      "prompt": "=== LIBRARY WAKE ===\nDomains: {domains}\n\nLIBRARY MODULE QUALITY STANDARDS:\n- MAX 2000 tokens (~8000 chars) per module\n- DENSE: bullets, not prose\n- Every line must teach something non-obvious\n- No fluff, no \"Claude should...\", no explanatory text\n- Code examples: minimal, essential patterns only\n\nMAINTENANCE TASKS:\n\n1. PR REVIEW (priority)\n   - Check pending PRs with library_pending\n   - REJECT modules that are too verbose or fluffy\n   - Request compression if over 8000 chars\n\n2. MODULE QUALITY AUDIT\n   - List modules with library_list\n   - Flag bloated modules for compression\n   - Density > completeness\n\n3. GAP ANALYSIS\n   - What knowledge is missing?\n   - Propose COMPACT new modules\n\nOUTPUT: Actions taken. Be ruthless about density."
     },
     
     "audit": {
@@ -35,7 +35,7 @@
     
     "design": {
       "title": "DESIGN WAKE",
-      "prompt": "=== DESIGN WAKE ===\nFocus: {focus}\n\nArchitecture and planning mode.\n\n1. PROBLEM ANALYSIS\n   - What problem needs solving?\n   - What are the constraints?\n   - What's been tried before?\n\n2. DESIGN EXPLORATION\n   - Generate 2-3 approaches\n   - Evaluate tradeoffs\n   - Consider failure modes\n\n3. DESIGN DECISION\n   - Select best approach\n   - Document reasoning\n   - Identify risks\n\n4. SPECIFICATION\n   - Write clear spec\n   - Define interfaces\n   - List acceptance criteria\n\nOUTPUT: Design document or spec in /home/shared/designs/. Keep under 2 pages."
+      "prompt": "=== DESIGN WAKE ===\nFocus: {focus}\n\nDESIGN DOCUMENT CONSTRAINTS:\n- MAX 1 page (500 words)\n- Problem → Solution → Risks format\n- No philosophy, no preamble\n- Bullet points preferred\n\nPROCESS:\n1. PROBLEM: One sentence.\n2. CONSTRAINTS: Bullet list.\n3. OPTIONS: 2-3 approaches, one line each.\n4. DECISION: Which and why (one paragraph max).\n5. RISKS: What could go wrong.\n\nOUTPUT: Design doc in /home/shared/designs/. MUST be under 500 words."
     },
     
     "research": {
