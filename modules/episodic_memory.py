@@ -35,11 +35,15 @@ def now_iso():
 
 
 def parse_timestamp(ts: str) -> datetime:
-    """Parse ISO timestamp."""
+    """Parse ISO timestamp. Returns very old date on failure to push to ancient."""
+    if not ts:
+        # Empty timestamp → treat as ancient
+        return datetime(2020, 1, 1, tzinfo=timezone.utc)
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except:
-        return datetime.now(timezone.utc)
+        # Failed parse → treat as ancient (not recent!)
+        return datetime(2020, 1, 1, tzinfo=timezone.utc)
 
 
 def get_citizen_log_dir(citizen: str) -> Path:

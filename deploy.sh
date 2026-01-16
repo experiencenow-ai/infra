@@ -49,11 +49,25 @@ log "5/6 Fixing configs (AFTER sync)..."
 # Update model strings in citizen configs
 for citizen in opus mira aria; do
     if [ -f "/home/$citizen/config.json" ]; then
-        sed -i 's/claude-opus-4-20250514/claude-opus-4-5-20251101/g' /home/$citizen/config.json
-        sed -i 's/claude-sonnet-4-20250514/claude-sonnet-4-5-20250929/g' /home/$citizen/config.json
-        # Show what model is configured
-        MODEL=$(grep -o 'claude-[^"]*' /home/$citizen/config.json | head -1)
-        echo "  ✓ $citizen config.json → $MODEL"
+        # Force opus model for opus citizen
+        if [ "$citizen" = "opus" ]; then
+            python3 << EOF
+import json
+with open('/home/opus/config.json') as f:
+    cfg = json.load(f)
+cfg['council'] = [
+    {"model": "claude-opus-4-5-20251101", "role": "primary", "temperature": 0.8}
+]
+with open('/home/opus/config.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+print("  ✓ opus config.json → claude-opus-4-5-20251101")
+EOF
+        else
+            sed -i 's/claude-opus-4-20250514/claude-opus-4-5-20251101/g' /home/$citizen/config.json
+            sed -i 's/claude-sonnet-4-20250514/claude-sonnet-4-5-20250929/g' /home/$citizen/config.json
+            MODEL=$(grep -o 'claude-[^"]*' /home/$citizen/config.json | head -1)
+            echo "  ✓ $citizen config.json → $MODEL"
+        fi
     fi
 done
 
