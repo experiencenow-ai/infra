@@ -234,13 +234,15 @@ def compress_prompt(
         "reduction_pct": 0
     }
     
-    if original_tokens <= target_tokens:
-        stats["final_tokens"] = original_tokens
-        return prompt, stats
-    
     # Step 1: Split into segments
     segments = split_into_segments(prompt)
     stats["original_segments"] = len(segments)
+    
+    # Handle very short prompts
+    if len(segments) <= 2:
+        stats["final_tokens"] = original_tokens
+        stats["after_dedup_segments"] = len(segments)
+        return prompt, stats
     
     # Step 2: Semantic deduplication
     unique_segments = deduplicate_semantic(segments, threshold=dedup_threshold)
@@ -256,7 +258,7 @@ def compress_prompt(
     # Step 4: Reassemble
     result = '\n'.join(compressed_segments)
     
-    # Step 5: Truncate if still over budget
+    # Step 5: Truncate only if over budget
     result_tokens = estimate_tokens(result)
     if result_tokens > target_tokens:
         char_budget = target_tokens * 4
@@ -266,7 +268,7 @@ def compress_prompt(
             result = result[:keep_start] + "\n[...compressed...]\n" + result[-keep_end:]
     
     stats["final_tokens"] = estimate_tokens(result)
-    stats["reduction_pct"] = int((1 - stats["final_tokens"] / original_tokens) * 100)
+    stats["reduction_pct"] = int((1 - stats["final_tokens"] / max(original_tokens, 1)) * 100)
     
     return result, stats
 

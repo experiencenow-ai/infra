@@ -266,19 +266,20 @@ def process(user_input: str, session: dict, council_config: list, modules: dict)
 If UNCERTAIN: use web_search, then capture with library_create.
 If stuck: use task_stuck."""
     
-    # COMPRESS PROMPT: Apply semantic deduplication + NLP compression
-    # This happens AFTER full prompt is built, before API call
+    # COMPRESS CONTEXT: Apply semantic deduplication + NLP compression
+    # Compresses everything EXCEPT user's prompt (which goes in messages separately)
     try:
         from modules.prompt_compressor import compress_prompt
         original_tokens = len(base_prompt) // 4
-        if original_tokens > 15000:  # Only compress if over threshold
-            base_prompt, comp_stats = compress_prompt(
-                base_prompt, 
-                target_tokens=18000,  # Leave room for user input
-                dedup_threshold=0.85,
-                aggressive_compress=True
-            )
-            print(f"  [COMPRESS] {comp_stats['original_tokens']} → {comp_stats['final_tokens']} tokens ({comp_stats['reduction_pct']}% reduction)")
+        base_prompt, comp_stats = compress_prompt(
+            base_prompt, 
+            target_tokens=20000,  # Soft target, won't truncate
+            dedup_threshold=0.85,
+            aggressive_compress=True
+        )
+        reduction = comp_stats.get('reduction_pct', 0)
+        if reduction > 5:  # Only log if meaningful reduction
+            print(f"  [COMPRESS] {comp_stats['original_tokens']} → {comp_stats['final_tokens']} ({reduction}% off)")
     except Exception as e:
         print(f"  [COMPRESS] Skipped: {e}")
     
