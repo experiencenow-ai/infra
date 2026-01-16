@@ -31,16 +31,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 import anthropic
+from .time_utils import now_iso, today_str
 
 # Use Haiku for all memory operations - it's just retrieval
 MEMORY_MODEL = "claude-haiku-4-5-20251001"
 MEMORY_COST = {"input": 0.25, "output": 1.25}
-
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-def today_str():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 def get_client():
     api_key = os.environ.get("ANTHROPIC_API_KEY")

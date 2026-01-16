@@ -9,10 +9,10 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from .time_utils import now_iso
 
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 
 class FailureTracker:

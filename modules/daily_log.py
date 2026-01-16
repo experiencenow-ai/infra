@@ -20,10 +20,10 @@ import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from .time_utils import now_iso
 
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 
 def today_date():

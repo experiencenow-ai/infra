@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Callable
 import functools
+from .time_utils import now_iso
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 def action_id(action_type: str, params: dict) -> str:
     """Generate unique ID for an action."""

@@ -6,9 +6,9 @@ Handles displaying results to the console/log.
 
 import json
 from datetime import datetime, timezone
+from .time_utils import now_iso
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 def display(result: dict, session: dict):
     """Display a result from council processing."""

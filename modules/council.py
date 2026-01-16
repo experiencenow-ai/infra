@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 import daily_log
 import episodic_memory
+from .time_utils import now_iso
 
 # Model costs per 1M tokens
 COSTS = {
@@ -43,8 +44,7 @@ ROUTER_MODEL = "claude-haiku-4-5-20251001"
 SIMPLE_MODEL = "claude-haiku-4-5-20251001"
 MEDIUM_MODEL = "claude-sonnet-4-5-20250929"
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 def get_client():
     """Get Anthropic client."""

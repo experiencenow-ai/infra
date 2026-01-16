@@ -10,6 +10,7 @@ import tiktoken
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from .time_utils import now_iso
 
 # Token counter
 try:
@@ -17,8 +18,7 @@ try:
 except:
     ENCODER = None
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 def count_tokens(text: str) -> int:
     """Count tokens in text."""

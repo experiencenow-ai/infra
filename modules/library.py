@@ -28,19 +28,16 @@ Wake distribution:
 
 import json
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from .time_utils import now_iso
 
 LIBRARY_ROOT = Path("/home/shared/library")
 LIBRARY_INDEX = LIBRARY_ROOT / "index.json"
 LIBRARY_MODULES = LIBRARY_ROOT / "modules"
 LIBRARY_PENDING = LIBRARY_ROOT / "pending"
 LIBRARY_SKILLS = LIBRARY_ROOT / "skills"
-
-
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
 
 
 def init_library():

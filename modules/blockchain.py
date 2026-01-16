@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Optional, List, Dict
 import urllib.request
 import urllib.parse
+from .time_utils import now_iso
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 ETHERSCAN_BASE = "https://api.etherscan.io/api"
 

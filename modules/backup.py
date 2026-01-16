@@ -25,9 +25,9 @@ import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from .time_utils import now_iso
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 
 CITIZENS = ["opus", "mira", "aria"]

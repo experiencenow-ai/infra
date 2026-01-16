@@ -12,9 +12,9 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from .time_utils import now_iso
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 # Tool definitions for API
 TOOL_DEFINITIONS = [

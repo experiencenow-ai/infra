@@ -16,6 +16,7 @@ import shutil
 import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
+from .time_utils import now_iso
 
 ADOPTION_FILE = Path("/home/shared/adoptions.json")
 BASELINE_DIR = Path("/home/shared/baseline")
@@ -23,8 +24,7 @@ CHANGE_REPORTS_FILE = Path("/home/shared/change_reports.json")
 CITIZENS = ["opus", "mira", "aria"]
 
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 
 def get_citizen_code_dir(citizen: str) -> Path:

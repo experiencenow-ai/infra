@@ -8,9 +8,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from .time_utils import now_iso
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 def get_next_task_id(citizen_home: Path) -> str:
     """Get next available task ID."""

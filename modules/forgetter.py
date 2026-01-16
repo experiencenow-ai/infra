@@ -16,6 +16,7 @@ import anthropic
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from .time_utils import now_iso
 
 # Model selection for forgetting
 # Sonnet for normal compression (cost effective, follows instructions well)
@@ -29,8 +30,7 @@ COSTS = {
     "claude-haiku-4-5-20251001": {"input": 0.25, "output": 1.25}
 }
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 def get_client():
     """Get Anthropic client."""

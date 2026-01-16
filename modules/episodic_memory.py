@@ -28,10 +28,10 @@ import random
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
+from .time_utils import now_iso
 
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
+
 
 
 def parse_timestamp(ts: str) -> datetime:
