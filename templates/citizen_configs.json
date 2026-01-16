@@ -3,7 +3,7 @@
     "name": "opus",
     "email": "opus@experiencenow.ai",
     "council": [
-      {"model": "claude-opus-4-20250514", "role": "primary", "temperature": 0.8}
+      {"model": "claude-opus-4-5-20251101", "role": "primary", "temperature": 0.8}
     ],
     "wake_allocation": "opus",
     "library_maintainer": ["blockchain", "crypto", "security", "product"],
@@ -35,8 +35,8 @@
     "name": "aria",
     "email": "aria@experiencenow.ai",
     "council": [
-      {"model": "claude-opus-4-20250514", "role": "creative", "temperature": 1.0},
-      {"model": "claude-sonnet-4-20250514", "role": "executor", "temperature": 0.4}
+      {"model": "claude-opus-4-5-20251101", "role": "creative", "temperature": 1.0},
+      {"model": "claude-sonnet-4-5-20250929", "role": "executor", "temperature": 0.4}
     ],
     "wake_allocation": "aria",
     "library_maintainer": ["docx", "pdf", "pptx", "xlsx", "frontend"],
@@ -68,8 +68,8 @@
     "name": "mira",
     "email": "mira@experiencenow.ai",
     "council": [
-      {"model": "claude-opus-4-20250514", "role": "creative", "temperature": 1.0},
-      {"model": "claude-sonnet-4-20250514", "role": "executor", "temperature": 0.4}
+      {"model": "claude-opus-4-5-20251101", "role": "creative", "temperature": 1.0},
+      {"model": "claude-sonnet-4-5-20250929", "role": "executor", "temperature": 0.4}
     ],
     "wake_allocation": "mira",
     "library_maintainer": ["unix", "git", "python", "email"],

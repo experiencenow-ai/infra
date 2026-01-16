@@ -33,10 +33,19 @@ fi
 log "1/5 Extracting tarball..."
 tar xzf "$TARBALL"
 
-log "2/5 Fixing permissions..."
+log "2/5 Fixing permissions and configs..."
 chown -R opus:opus /home/opus
 chown -R mira:mira /home/mira
 chown -R aria:aria /home/aria
+
+# Update model strings in citizen configs
+for citizen in opus mira aria; do
+    if [ -f "/home/$citizen/config.json" ]; then
+        sed -i 's/claude-opus-4-20250514/claude-opus-4-5-20251101/g' /home/$citizen/config.json
+        sed -i 's/claude-sonnet-4-20250514/claude-sonnet-4-5-20250929/g' /home/$citizen/config.json
+        echo "  ✓ Updated $citizen config.json"
+    fi
+done
 
 log "3/5 Pushing to GitHub..."
 cd experience_v2

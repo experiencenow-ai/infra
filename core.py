@@ -725,7 +725,7 @@ def interactive_loop(session: dict, m: dict, config: dict, initial_message: str 
     )
     
     print("\n[INTERACTIVE MODE]")
-    print("Commands: /file, /task, /goals, /status, /email, /help, /quit")
+    print("Commands: /file, /opus, /task, /goals, /status, /help, /quit")
     print()
     
     # Process initial message if provided
@@ -763,6 +763,9 @@ def interactive_loop(session: dict, m: dict, config: dict, initial_message: str 
                 m
             )
             
+            # Clear force flags after use
+            session.pop("force_complex", None)
+            
             # Display result
             m["reporter"].display(result, session)
             
@@ -789,6 +792,7 @@ def handle_command(cmd: str, session: dict, m: dict, config: dict):
 Commands:
   /task <desc>   - Create new task (enters intake)
   /file <path>   - Send file with optional message
+  /opus          - Force next prompt to use Opus model
   /goals         - Show active goals
   /tasks         - Show task queue
   /status        - Session status
@@ -858,6 +862,10 @@ Commands:
     elif cmd == "/reload":
         m = reload_modules()
         print("[Modules reloaded]")
+    
+    elif cmd == "/opus":
+        session["force_complex"] = True
+        print("[Next prompt will use Opus]")
     
     elif cmd == "/save":
         m["context_mgr"].save_all(session)

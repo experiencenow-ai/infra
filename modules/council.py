@@ -66,11 +66,17 @@ def route_complexity(task_desc: str, session: dict) -> str:
     
     Cost: ~100 tokens × $0.25/1M = $0.000025 per routing decision
     """
+    # Allow forcing complexity via session
+    if session.get("force_complex"):
+        return "complex"
+    
     prompt = f"""Classify this task's complexity. Reply with ONE word: simple, medium, or complex.
 
-simple = Single command, status check, file read, straightforward question
-medium = Multi-step task, some logic, moderate code changes
-complex = Architecture decisions, debugging, creative work, multi-file refactoring
+simple = Single status check, file read, simple question, greeting
+medium = Multi-step task, moderate code changes, standard operations
+complex = Architecture, debugging hard problems, creative/philosophical work, multi-file changes, deep analysis, important decisions
+
+Err on the side of "complex" for anything non-trivial.
 
 TASK: {task_desc[:500]}
 
