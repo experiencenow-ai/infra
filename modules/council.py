@@ -34,7 +34,7 @@ COSTS = {
 }
 
 # Safety limits
-MAX_COST_PER_WAKE = 2.00  # $2.00 max per wake
+MAX_COST_PER_WAKE = 5.00  # $5.00 max per wake (Opus is 5x more expensive than Sonnet)
 MAX_TOOL_REPEATS = 3      # Warn after this many identical calls
 MAX_ITERATIONS = 30       # Max tool use loops
 

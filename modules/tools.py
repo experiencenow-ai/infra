@@ -208,6 +208,16 @@ TOOL_DEFINITIONS = [
         }
     },
     {
+        "name": "task_start",
+        "description": "Start working on a task (moves from queue to active). Only one task can be active at a time.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task ID to start (e.g., t_001). If not provided, starts highest priority queued task."}
+            }
+        }
+    },
+    {
         "name": "goal_create",
         "description": "Create a new goal (big idea that requires multiple tasks)",
         "input_schema": {
@@ -832,6 +842,9 @@ def execute_tool(tool_name: str, args: dict, session: dict, modules: dict) -> st
         
         elif tool_name == "task_create":
             return task_create(args, session, modules)
+        
+        elif tool_name == "task_start":
+            return task_start(args, session, modules)
         
         elif tool_name == "goal_create":
             return goal_create(args, session, modules)
@@ -1686,6 +1699,53 @@ def task_create(args: dict, session: dict, modules: dict) -> str:
     return f"TASK_CREATED: {task_id} for {for_citizen} - {description[:50]}"
 
 
+def task_start(args: dict, session: dict, modules: dict) -> str:
+    """Start working on a task (moves from queue to active)."""
+    task_id = args.get("task_id")
+    citizen = session["citizen"]
+    citizen_home = session["citizen_home"]
+    queue_dir = citizen_home / "tasks" / "queue"
+    active_dir = citizen_home / "tasks" / "active"
+    active_dir.mkdir(parents=True, exist_ok=True)
+    # Check if already have an active task
+    existing_active = [f for f in active_dir.glob("*.json") if not f.name.endswith("_progress.json")]
+    if existing_active:
+        current = existing_active[0].stem
+        return f"ERROR: Already have active task {current}. Complete or mark stuck first."
+    # Find task to start
+    if task_id:
+        task_file = queue_dir / f"{task_id}.json"
+        if not task_file.exists():
+            return f"ERROR: Task {task_id} not found in queue"
+    else:
+        # Find highest priority task
+        queued = list(queue_dir.glob("t_*.json"))
+        if not queued:
+            return "ERROR: No tasks in queue"
+        priority_order = {"high": 0, "medium": 1, "low": 2}
+        def get_priority(f):
+            try:
+                data = json.loads(f.read_text())
+                return priority_order.get(data.get("priority", "medium"), 1)
+            except:
+                return 1
+        queued.sort(key=get_priority)
+        task_file = queued[0]
+        task_id = task_file.stem
+    # Move to active
+    task_data = json.loads(task_file.read_text())
+    task_data["status"] = "active"
+    task_data["started_at"] = now_iso()
+    dest_file = active_dir / task_file.name
+    dest_file.write_text(json.dumps(task_data, indent=2))
+    task_file.unlink()
+    # Create progress file
+    progress_file = active_dir / f"{task_id}_progress.json"
+    progress = {"task_id": task_id, "steps": [], "started_at": now_iso()}
+    progress_file.write_text(json.dumps(progress, indent=2))
+    return f"TASK_STARTED: {task_id} - {task_data.get('description', '')[:60]}"
+
+
 def goal_create(args: dict, session: dict, modules: dict) -> str:
     """Create a new goal."""
     title = args.get("title", "")
@@ -1767,6 +1827,14 @@ def github_issue_create(args: dict, session: dict, modules: dict) -> str:
     title = args.get("title", "")
     body = args.get("body", "")
     labels = args.get("labels", [])
+    
+    # Handle labels passed as JSON string
+    if isinstance(labels, str):
+        try:
+            labels = json.loads(labels)
+        except:
+            labels = [labels] if labels else []
+    
     citizen = session["citizen"]
     if not title or not body:
         return "ERROR: title and body required"
