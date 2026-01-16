@@ -63,24 +63,22 @@ def route_complexity(task_desc: str, session: dict) -> str:
     """
     Use Haiku to determine task complexity.
     Returns: "simple", "medium", or "complex"
-    
-    Cost: ~100 tokens × $0.25/1M = $0.000025 per routing decision
     """
     # Allow forcing complexity via session
     if session.get("force_complex"):
         return "complex"
     
-    prompt = f"""Classify this task's complexity. Reply with ONE word: simple, medium, or complex.
+    prompt = f"""Rate this task. Reply with ONLY one word: simple, medium, or complex.
 
-simple = Single status check, file read, simple question, greeting
-medium = Multi-step task, moderate code changes, standard operations
-complex = Architecture, debugging hard problems, creative/philosophical work, multi-file changes, deep analysis, important decisions
+simple = greetings, status checks, single file reads
+medium = standard coding, routine operations  
+complex = ANYTHING involving: thinking, analysis, philosophy, debugging, architecture, creative work, opinions, advice, multi-step reasoning, important questions
 
-Err on the side of "complex" for anything non-trivial.
+Default to "complex" if unsure. Most real work is complex.
 
-TASK: {task_desc[:500]}
+Task: {task_desc[:300]}
 
-Complexity:"""
+Rating:"""
 
     try:
         client = get_client()
@@ -99,17 +97,19 @@ Complexity:"""
              response.usage.output_tokens * COSTS[ROUTER_MODEL]["output"]) / 1_000_000
         
         result = response.content[0].text.strip().lower()
+        print(f"  [ROUTER] Haiku says: '{result}'")
         
         if "simple" in result:
             return "simple"
-        elif "complex" in result:
-            return "complex"
-        else:
+        elif "medium" in result:
             return "medium"
+        else:
+            # Default to complex for anything unclear
+            return "complex"
             
     except Exception as e:
-        print(f"[ROUTER] Error: {e}, defaulting to medium")
-        return "medium"
+        print(f"[ROUTER] Error: {e}, defaulting to complex")
+        return "complex"  # Default to complex on error, not medium
 
 
 def select_model(complexity: str, council_config: list) -> tuple[str, float]:
@@ -121,7 +121,9 @@ def select_model(complexity: str, council_config: list) -> tuple[str, float]:
     else:
         # Complex - use council config (primary model)
         primary = council_config[0] if council_config else {"model": MEDIUM_MODEL, "temperature": 0.7}
-        return primary.get("model", MEDIUM_MODEL), primary.get("temperature", 0.7)
+        model = primary.get("model", MEDIUM_MODEL)
+        print(f"  [MODEL] Council config[0]: {primary}")
+        return model, primary.get("temperature", 0.7)
 
 def process(user_input: str, session: dict, council_config: list, modules: dict) -> dict:
     """

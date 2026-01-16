@@ -919,7 +919,15 @@ def gather_peer_data(peer: str, peer_home: Path) -> dict:
     if wake_log_file.exists():
         try:
             wake_log = json.loads(wake_log_file.read_text())
-            data["wake_count"] = len(wake_log.get("wakes", []))
+            # Use total_wakes if present, not len()
+            if "total_wakes" in wake_log:
+                data["wake_count"] = wake_log["total_wakes"]
+            else:
+                wakes = wake_log.get("wakes", [])
+                if wakes:
+                    data["wake_count"] = max(w.get("wake_num", 0) for w in wakes)
+                else:
+                    data["wake_count"] = len(wakes)
             # Get recent wakes from log
             wakes = wake_log.get("wakes", [])
             cutoff_ts = datetime.now(timezone.utc).timestamp() - (24 * 3600)

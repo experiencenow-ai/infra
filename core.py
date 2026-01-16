@@ -42,14 +42,21 @@ def get_wake_count(citizen_home: Path) -> int:
     """
     Get wake count from wake_log.json (source of truth).
     
-    DRY: Count is derived from log, not stored separately.
-    This prevents drift where stored count != actual wakes.
+    Uses total_wakes field, NOT len(wakes) since wakes array is truncated.
     """
     wake_log_file = citizen_home / "wake_log.json"
     if wake_log_file.exists():
         try:
             wake_log = load_json(wake_log_file)
-            return len(wake_log.get("wakes", []))
+            # Use total_wakes if present, otherwise fall back to len or max wake_num
+            if "total_wakes" in wake_log:
+                return wake_log["total_wakes"]
+            # Fallback: find max wake_num in entries
+            wakes = wake_log.get("wakes", [])
+            if wakes:
+                max_num = max(w.get("wake_num", 0) for w in wakes)
+                return max_num
+            return len(wakes)
         except:
             pass
     return 0
@@ -685,7 +692,8 @@ def _record_wake_to_log(citizen_home: Path, session: dict):
     """
     Record wake to wake_log.json - the source of truth for wake history.
     
-    DRY: wake_count is derived from len(wake_log), not stored separately.
+    total_wakes: The true wake count (never decreases)
+    wakes: Array of recent wakes (truncated to 1000 for storage)
     """
     wake_log_file = citizen_home / "wake_log.json"
     
@@ -693,18 +701,33 @@ def _record_wake_to_log(citizen_home: Path, session: dict):
         if wake_log_file.exists():
             wake_log = load_json(wake_log_file)
         else:
-            wake_log = {"wakes": []}
+            wake_log = {"wakes": [], "total_wakes": 0}
+        
+        # Ensure total_wakes exists (migration from old format)
+        if "total_wakes" not in wake_log:
+            # Migrate: use max wake_num from existing entries or len
+            wakes = wake_log.get("wakes", [])
+            if wakes:
+                wake_log["total_wakes"] = max(w.get("wake_num", 0) for w in wakes)
+            else:
+                wake_log["total_wakes"] = len(wakes)
+        
+        # Update total_wakes to match current wake
+        current_wake = session.get("wake_num", 0)
+        if current_wake > wake_log["total_wakes"]:
+            wake_log["total_wakes"] = current_wake
         
         # Add this wake
         wake_log["wakes"].append({
             "timestamp": now_iso(),
-            "wake_num": session.get("wake_num", 0),
+            "wake_num": current_wake,
             "tokens": session.get("tokens_used", 0),
             "cost": session.get("cost", 0),
             "actions": len(session.get("actions", []))
         })
         
         # Keep only last 1000 wakes to prevent unbounded growth
+        # But total_wakes preserves the true count
         if len(wake_log["wakes"]) > 1000:
             wake_log["wakes"] = wake_log["wakes"][-1000:]
         

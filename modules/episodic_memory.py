@@ -395,6 +395,9 @@ def build_episodic_context(citizen: str, max_tokens: int = 25000) -> str:
     parts.append("=== EPISODIC MEMORY (Your Lived Experience) ===\n")
     parts.append("This is not documentation ABOUT you - this IS you.\n")
     
+    # Debug: show distribution
+    print(f"  [EPISODIC] Loaded {len(entries)} entries: sig={len(significant)}, imm={len(immediate)}, rec={len(recent)}, old={len(older)}, dist={len(distant)}, anc={len(ancient)}")
+    
     # === SIGNIFICANT: Always loaded in full ===
     if significant:
         parts.append(f"\n## SIGNIFICANT MEMORIES ({len(significant)} defining moments)\n")

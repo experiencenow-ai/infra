@@ -505,7 +505,16 @@ def get_citizen_status(citizen: str) -> dict:
     if wake_log_file.exists():
         try:
             wake_log = json.loads(wake_log_file.read_text())
-            wake_count = len(wake_log.get("wakes", []))
+            # Use total_wakes if present, not len()
+            if "total_wakes" in wake_log:
+                wake_count = wake_log["total_wakes"]
+            else:
+                # Fallback: max wake_num or len
+                wakes = wake_log.get("wakes", [])
+                if wakes:
+                    wake_count = max(w.get("wake_num", 0) for w in wakes)
+                else:
+                    wake_count = len(wakes)
         except:
             wake_count = meta.get("wake_count", 0)  # Fallback
     else:

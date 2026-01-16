@@ -30,31 +30,53 @@ if [ -z "$GITHUB_PAT" ]; then
     err "GITHUB_PAT not set. Export it or put in ~/.github_pat"
 fi
 
-log "1/5 Extracting tarball..."
+log "1/6 Extracting tarball..."
 tar xzf "$TARBALL"
 
-log "2/5 Fixing permissions and configs..."
+log "2/6 Pushing to GitHub..."
+cd experience_v2
+./scripts/PUSH_TO_GITHUB.sh
+
+log "3/6 Syncing all citizens..."
+./scripts/sync_all.sh
+
+log "4/6 Fixing permissions..."
 chown -R opus:opus /home/opus
 chown -R mira:mira /home/mira
 chown -R aria:aria /home/aria
 
+log "5/6 Fixing configs (AFTER sync)..."
 # Update model strings in citizen configs
 for citizen in opus mira aria; do
     if [ -f "/home/$citizen/config.json" ]; then
         sed -i 's/claude-opus-4-20250514/claude-opus-4-5-20251101/g' /home/$citizen/config.json
         sed -i 's/claude-sonnet-4-20250514/claude-sonnet-4-5-20250929/g' /home/$citizen/config.json
-        echo "  ✓ Updated $citizen config.json"
+        # Show what model is configured
+        MODEL=$(grep -o 'claude-[^"]*' /home/$citizen/config.json | head -1)
+        echo "  ✓ $citizen config.json → $MODEL"
     fi
 done
 
-log "3/5 Pushing to GitHub..."
-cd experience_v2
-./scripts/PUSH_TO_GITHUB.sh
+# Fix Opus wake count (v1 had 1681 wakes)
+if [ -f "/home/opus/wake_log.json" ]; then
+    python3 << 'EOF'
+import json
+wake_log_file = "/home/opus/wake_log.json"
+with open(wake_log_file) as f:
+    wake_log = json.load(f)
 
-log "4/5 Syncing all citizens..."
-./scripts/sync_all.sh
+# Set total_wakes if missing or too low
+if wake_log.get("total_wakes", 0) < 1681:
+    wake_log["total_wakes"] = 1681
+    with open(wake_log_file, "w") as f:
+        json.dump(wake_log, f, indent=2)
+    print("  ✓ Fixed opus wake count to 1681")
+else:
+    print(f"  ✓ opus wake count already at {wake_log['total_wakes']}")
+EOF
+fi
 
-log "5/5 Verifying..."
+log "6/6 Verifying..."
 for citizen in opus mira aria; do
     if [ -f "/home/$citizen/code/core.py" ]; then
         echo "  ✓ $citizen code synced"
